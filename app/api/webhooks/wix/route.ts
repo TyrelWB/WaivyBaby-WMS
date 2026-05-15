@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   }
 
   const order = orderData.order || orderData
-  const wixOrderId = order.id || body.entityId
+  const wixOrderId = order._id || order.id || body.entityId
 
   if (!wixOrderId) {
     return NextResponse.json({ error: 'No order ID in webhook' }, { status: 400 })

@@ -45,7 +45,7 @@ export async function POST() {
   let skipped = 0
 
   for (const wixOrder of wixOrders) {
-    const wixOrderId = wixOrder.id
+    const wixOrderId = wixOrder._id || wixOrder.id
     if (!wixOrderId) { skipped++; continue }
 
     const { data: existing } = await admin
