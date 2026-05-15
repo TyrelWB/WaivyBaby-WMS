@@ -30,7 +30,7 @@ export async function syncWixOrders(
     headers,
     body: JSON.stringify({
       query: {
-        filter: JSON.stringify({ paymentStatus: 'PAID' }),
+        filter: { paymentStatus: { $eq: 'PAID' } },
         sort: [{ fieldName: 'createdDate', order: 'DESC' }],
         paging: { limit: 50 },
       }
