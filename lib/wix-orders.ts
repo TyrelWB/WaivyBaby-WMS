@@ -18,7 +18,8 @@ export async function syncWixOrders(
     return { imported: 0, skipped: 0, total: 0, errors: ['Wix not configured'] }
   }
 
-  const { webhook_secret } = integration.credentials
+  const creds = integration.credentials as Record<string, any>
+  const webhook_secret = creds?.webhook_secret as string | undefined
   const veloRes = await fetch(
     `https://www.waivybaby.com/_functions/getNewOrders?secret=${webhook_secret || 'waivybaby2024'}`
   )
