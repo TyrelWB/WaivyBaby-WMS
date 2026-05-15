@@ -14,7 +14,7 @@ export async function syncWixOrders(
     .eq('provider', 'wix')
     .single()
 
-  if (!integration?.credentials?.api_key || !integration?.credentials?.site_id) {
+  if (!integration?.credentials) {
     return { imported: 0, skipped: 0, total: 0, errors: ['Wix not configured'] }
   }
 

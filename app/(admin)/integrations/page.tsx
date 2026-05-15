@@ -145,8 +145,9 @@ export default function IntegrationsPage() {
     setWixSyncingOrders(true)
     const res = await fetch('/api/integrations/wix/sync', { method: 'POST' })
     const d = await res.json()
-    if (d.error) {
-      toast.error(d.error)
+    const errMsg = d.error || d.errors?.[0]
+    if (errMsg) {
+      toast.error(errMsg)
     } else {
       toast.success(`Imported ${d.imported} new order${d.imported !== 1 ? 's' : ''} from Wix`)
     }
