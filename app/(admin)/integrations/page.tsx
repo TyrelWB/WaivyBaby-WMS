@@ -44,6 +44,7 @@ export default function IntegrationsPage() {
   const [wixSyncing, setWixSyncing] = useState(false)
   const [wixMapping, setWixMapping] = useState(false)
   const [wixSyncingInv, setWixSyncingInv] = useState(false)
+  const [wixSyncingOrders, setWixSyncingOrders] = useState(false)
   const [webhookCopied, setWebhookCopied] = useState(false)
 
   async function loadStatus() {
@@ -138,6 +139,18 @@ export default function IntegrationsPage() {
       toast.success(`Synced ${d.synced} products to Wix${d.failed ? ` (${d.failed} failed)` : ''}`)
     }
     setWixSyncingInv(false)
+  }
+
+  async function syncOrders() {
+    setWixSyncingOrders(true)
+    const res = await fetch('/api/integrations/wix/sync', { method: 'POST' })
+    const d = await res.json()
+    if (d.error) {
+      toast.error(d.error)
+    } else {
+      toast.success(`Imported ${d.imported} new order${d.imported !== 1 ? 's' : ''} from Wix`)
+    }
+    setWixSyncingOrders(false)
   }
 
   function copyWebhookUrl() {
@@ -466,6 +479,14 @@ export default function IntegrationsPage() {
                   >
                     {wixSyncingInv ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
                     {wixSyncingInv ? 'Syncing...' : 'Push Inventory to Wix'}
+                  </button>
+                  <button
+                    onClick={syncOrders}
+                    disabled={wixSyncingOrders}
+                    className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {wixSyncingOrders ? <Loader2 size={14} className="animate-spin" /> : <ShoppingCart size={14} />}
+                    {wixSyncingOrders ? 'Importing...' : 'Sync Orders from Wix'}
                   </button>
                 </div>
                 <p className="text-xs text-gray-400">Run <span className="font-medium text-gray-600">Map Products</span> first to link WMS SKUs to Wix products. Then use <span className="font-medium text-gray-600">Push Inventory</span> to set Wix stock levels from WMS.</p>
