@@ -18,31 +18,17 @@ export async function syncWixOrders(
     return { imported: 0, skipped: 0, total: 0, errors: ['Wix not configured'] }
   }
 
-  const { api_key, site_id } = integration.credentials
-  const headers = {
-    'Authorization': api_key,
-    'wix-site-id': site_id,
-    'Content-Type': 'application/json',
+  const { webhook_secret } = integration.credentials
+  const veloRes = await fetch(
+    `https://www.waivybaby.com/_functions/getNewOrders?secret=${webhook_secret || 'waivybaby2024'}`
+  )
+
+  if (!veloRes.ok) {
+    const err = await veloRes.text()
+    return { imported: 0, skipped: 0, total: 0, errors: [`Velo error (${veloRes.status}): ${err.slice(0, 200)}`] }
   }
 
-  const wixRes = await fetch('https://www.wixapis.com/ecommerce/v1/orders/query', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      query: {
-        filter: { paymentStatus: { $eq: 'PAID' } },
-        sort: [{ fieldName: 'createdDate', order: 'DESC' }],
-        paging: { limit: 50 },
-      }
-    }),
-  })
-
-  if (!wixRes.ok) {
-    const err = await wixRes.text()
-    return { imported: 0, skipped: 0, total: 0, errors: [`Wix API error (${wixRes.status}): ${err.slice(0, 200)}`] }
-  }
-
-  const wixData = await wixRes.json()
+  const wixData = await veloRes.json()
   const wixOrders: any[] = wixData.orders || []
 
   let imported = 0
