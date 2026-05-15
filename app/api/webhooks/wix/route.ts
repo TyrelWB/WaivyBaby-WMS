@@ -51,9 +51,24 @@ export async function POST(req: Request) {
   }
 
   const orgId = integration.org_id
+  const creds = integration.credentials as Record<string, any>
+
+  // Fetch full order from Wix REST API to get complete data
+  let fullOrder = order
+  if (creds?.api_key && creds?.site_id) {
+    try {
+      const wixRes = await fetch(`https://www.wixapis.com/ecommerce/v1/orders/${wixOrderId}`, {
+        headers: { 'Authorization': creds.api_key, 'wix-site-id': creds.site_id },
+      })
+      if (wixRes.ok) {
+        const wixData = await wixRes.json()
+        fullOrder = wixData.order || wixData
+      }
+    } catch {}
+  }
 
   // Only process paid orders
-  const paymentStatus = order.paymentStatus || order.payment_status || ''
+  const paymentStatus = fullOrder.paymentStatus || fullOrder.payment_status || order.paymentStatus || ''
   if (!['PAID', 'FULLY_PAID', 'NOT_APPLICABLE'].includes(paymentStatus)) {
     return NextResponse.json({ ok: true, skipped: true, reason: `Payment status: ${paymentStatus}` })
   }
@@ -79,28 +94,28 @@ export async function POST(req: Request) {
     .single()
 
   // Parse customer
-  const buyerInfo = order.buyerInfo || {}
+  const buyerInfo = fullOrder.buyerInfo || {}
   const contact = buyerInfo.contactDetails || {}
   const customerName = [contact.firstName, contact.lastName].filter(Boolean).join(' ') || buyerInfo.email || null
   const customerEmail = buyerInfo.email || null
 
   // Parse shipping address
-  const shipAddr = order.shippingInfo?.logistics?.shippingAddress
-    || order.shippingInfo?.logistics?.deliverToAddress
+  const shipAddr = fullOrder.shippingInfo?.logistics?.shippingAddress
+    || fullOrder.shippingInfo?.logistics?.deliverToAddress
     || null
 
   // Create WMS order
   const { data: newOrder, error: orderError } = await admin.from('orders').insert({
     org_id: orgId,
     warehouse_id: adminUser?.warehouse_id || null,
-    order_number: `WIX-${order.number || wixOrderId.slice(0, 8)}`,
+    order_number: `WIX-${fullOrder.number || wixOrderId.slice(0, 8)}`,
     customer_name: customerName,
     customer_email: customerEmail,
     status: 'pending',
     wix_order_id: wixOrderId,
     is_rush: false,
     is_bulk: false,
-    notes: `Wix #${order.number || wixOrderId}`,
+    notes: `Wix #${fullOrder.number || wixOrderId}`,
     ...(shipAddr ? {
       shipping_name: customerName,
       shipping_address_1: shipAddr.addressLine || shipAddr.addressLine1 || null,
@@ -128,7 +143,7 @@ export async function POST(req: Request) {
   }
 
   // Add order items
-  const lineItems: any[] = order.lineItems || []
+  const lineItems: any[] = fullOrder.lineItems || []
   for (const item of lineItems) {
     const sku = item.catalogReference?.externalReference || item.physicalProperties?.sku || ''
     if (!sku) continue
