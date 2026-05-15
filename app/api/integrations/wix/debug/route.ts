@@ -58,9 +58,33 @@ export async function GET() {
     }
   })
 
+  // Fetch one order from REST API to check shipping structure
+  const testOrderId = veloOrders[0]?._id || veloOrders[0]?.id
+  let restApiSample: any = null
+  if (testOrderId && creds?.api_key && creds?.site_id) {
+    try {
+      const r = await fetch(`https://www.wixapis.com/ecommerce/v1/orders/${testOrderId}`, {
+        headers: { 'Authorization': creds.api_key, 'wix-site-id': creds.site_id },
+      })
+      const d = await r.json()
+      const o = d.order || d
+      restApiSample = {
+        status: r.status,
+        _id: o._id,
+        number: o.number,
+        buyerInfo: o.buyerInfo,
+        shippingInfo: o.shippingInfo,
+        lineItemsCount: (o.lineItems || []).length,
+      }
+    } catch (e: any) {
+      restApiSample = { error: e.message }
+    }
+  }
+
   return NextResponse.json({
     product_lookup: { sku: testSku, found: !!product, product },
     wms_orders: wmsWithItems,
     cross_reference: crossRef,
+    rest_api_sample: restApiSample,
   })
 }
