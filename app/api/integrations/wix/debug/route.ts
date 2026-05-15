@@ -47,7 +47,11 @@ export async function GET() {
     return {
       wix_id: wixId,
       wix_number: o.number,
-      lineItems: o.lineItems?.length || 0,
+      lineItems: (o.lineItems || []).map((item: any) => ({
+        sku_externalRef: item.catalogReference?.externalReference,
+        sku_physical: item.physicalProperties?.sku,
+        quantity: item.quantity,
+      })),
       wms_found: !!wmsMatch,
       wms_order_number: wmsMatch?.order_number,
       wms_item_count: wmsMatch?.item_count ?? 'no match',
