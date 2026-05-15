@@ -16,13 +16,11 @@ async function fetchFullWixOrder(wixOrderId: string, apiKey: string, siteId: str
 
 function parseOrderFields(order: any) {
   const buyerInfo = order.buyerInfo || {}
-  const contact = order.contactDetails || buyerInfo.contactDetails || {}
+  const destination = order.shippingInfo?.logistics?.shippingDestination || {}
+  const shipAddr = destination.address || order.shippingInfo?.logistics?.shippingAddress || null
+  const contact = destination.contactDetails || order.contactDetails || buyerInfo.contactDetails || {}
   const customerName = [contact.firstName, contact.lastName].filter(Boolean).join(' ') || buyerInfo.email || null
   const customerEmail = buyerInfo.email || null
-  const shipAddr = order.shippingAddress
-    || order.shippingInfo?.logistics?.shippingAddress
-    || order.shippingInfo?.logistics?.deliverToAddress
-    || null
   return { customerName, customerEmail, contact, shipAddr }
 }
 
@@ -119,7 +117,8 @@ export async function syncWixOrders(
       }
 
       const updateFields: Record<string, any> = {}
-      if (!hasName && customerName) updateFields.customer_name = customerName
+      const realName = [contact.firstName, contact.lastName].filter(Boolean).join(' ')
+      if (realName && existing.customer_name !== realName) updateFields.customer_name = realName
       if (customerEmail) updateFields.customer_email = customerEmail
       if (!hasShipping && shipAddr) {
         updateFields.shipping_name = customerName
