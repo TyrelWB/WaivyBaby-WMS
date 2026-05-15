@@ -144,6 +144,7 @@ export async function syncInventoryToWix(productId: string, orgId: string): Prom
   const payload = {
     secret: webhook_secret || 'waivybaby2024',
     inventoryItemId: product.wix_inventory_item_id,
+    productId: product.wix_product_id,
     variantId,
     quantity: availableQty,
   }
