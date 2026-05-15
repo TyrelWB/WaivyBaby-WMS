@@ -44,6 +44,13 @@ export default function PickPage() {
     scanRef.current?.focus()
   }, [])
 
+  // Poll for new orders every 30 seconds when idle (no current order)
+  useEffect(() => {
+    if (order || !worker) return
+    const interval = setInterval(() => fetchAssignedOrder(worker), 30000)
+    return () => clearInterval(interval)
+  }, [order, worker])
+
   async function fetchAssignedOrder(session: WorkerSession) {
     let justAssigned = false
 
