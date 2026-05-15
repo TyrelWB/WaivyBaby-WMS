@@ -16,10 +16,11 @@ async function fetchFullWixOrder(wixOrderId: string, apiKey: string, siteId: str
 
 function parseOrderFields(order: any) {
   const buyerInfo = order.buyerInfo || {}
-  const contact = buyerInfo.contactDetails || {}
+  const contact = order.contactDetails || buyerInfo.contactDetails || {}
   const customerName = [contact.firstName, contact.lastName].filter(Boolean).join(' ') || buyerInfo.email || null
   const customerEmail = buyerInfo.email || null
-  const shipAddr = order.shippingInfo?.logistics?.shippingAddress
+  const shipAddr = order.shippingAddress
+    || order.shippingInfo?.logistics?.shippingAddress
     || order.shippingInfo?.logistics?.deliverToAddress
     || null
   return { customerName, customerEmail, contact, shipAddr }
