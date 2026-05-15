@@ -34,6 +34,17 @@ export async function GET(req: Request) {
   const veloData = await veloRes.json()
   const veloOrders: any[] = veloData?.orders || []
 
+  // Show raw first order from Velo to inspect all fields
+  const veloSample = veloOrders[0] ? {
+    _id: veloOrders[0]._id,
+    number: veloOrders[0].number,
+    buyerInfo: veloOrders[0].buyerInfo,
+    contactDetails: veloOrders[0].contactDetails,
+    shippingAddress: veloOrders[0].shippingAddress,
+    shippingInfo: veloOrders[0].shippingInfo,
+    allKeys: Object.keys(veloOrders[0]),
+  } : null
+
   const testOrderId = veloOrders[0]?._id || veloOrders[0]?.id
   let restApiSample: any = null
   if (testOrderId && creds?.api_key && creds?.site_id) {
@@ -56,5 +67,5 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ wms_orders: wmsWithItems, rest_api_sample: restApiSample })
+  return NextResponse.json({ velo_sample: veloSample, wms_orders: wmsWithItems, rest_api_sample: restApiSample })
 }
