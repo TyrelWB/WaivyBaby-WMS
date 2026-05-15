@@ -442,16 +442,6 @@ export default function IntegrationsPage() {
               {wixTesting ? <Loader2 size={14} className="animate-spin" /> : null}
               {wixTesting ? 'Testing...' : 'Test Connection'}
             </button>
-            {wixConfigured && (
-              <button
-                onClick={syncWix}
-                disabled={wixSyncing}
-                className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors ml-auto"
-              >
-                <RefreshCw size={14} className={wixSyncing ? 'animate-spin' : ''} />
-                {wixSyncing ? 'Syncing...' : 'Sync Orders Now'}
-              </button>
-            )}
           </div>
 
           {status.wix?.last_synced_at && (
