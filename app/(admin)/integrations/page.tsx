@@ -149,7 +149,11 @@ export default function IntegrationsPage() {
     if (errMsg) {
       toast.error(errMsg)
     } else {
-      toast.success(`Imported ${d.imported} new order${d.imported !== 1 ? 's' : ''} from Wix`)
+      const parts = []
+      if (d.imported > 0) parts.push(`${d.imported} new`)
+      if (d.updated > 0) parts.push(`${d.updated} updated`)
+      if (parts.length === 0) parts.push('0 new')
+      toast.success(`Orders from Wix: ${parts.join(', ')} (${d.skipped} skipped)`)
     }
     setWixSyncingOrders(false)
   }
