@@ -32,17 +32,21 @@ export async function recordInventoryMovement(params: {
   } else if (movementType === 'adjust') {
     newOnHand = Math.max(0, newOnHand + quantityChange)
   } else if (movementType === 'reserve') {
+    // Move from on hand into reserved
+    newOnHand = Math.max(0, newOnHand - Math.abs(quantityChange))
     newReserved = newReserved + Math.abs(quantityChange)
   } else if (movementType === 'release' || movementType === 'cancel') {
+    // Move back from reserved to on hand
     newReserved = Math.max(0, newReserved - Math.abs(quantityChange))
+    newOnHand = newOnHand + Math.abs(quantityChange)
   } else if (movementType === 'ship') {
-    newOnHand = Math.max(0, newOnHand - Math.abs(quantityChange))
+    // Item leaves warehouse — remove from reserved
     newReserved = Math.max(0, newReserved - Math.abs(quantityChange))
   } else if (movementType === 'damage') {
     newOnHand = Math.max(0, newOnHand - Math.abs(quantityChange))
   }
 
-  const newAvailable = Math.max(0, newOnHand - newReserved)
+  const newAvailable = newOnHand
 
   await admin.from('inventory').update({
     qty_on_hand: newOnHand,

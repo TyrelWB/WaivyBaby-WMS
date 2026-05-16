@@ -136,7 +136,7 @@ export async function syncInventoryToWix(productId: string, orgId: string): Prom
     return { ok: false, error: 'Could not find Wix variant ID — check product has a SKU in Wix' }
   }
 
-  const availableQty = Math.max(0, (inventory?.qty_on_hand || 0) - (inventory?.qty_reserved || 0))
+  const availableQty = Math.max(0, inventory?.qty_on_hand || 0)
   const { webhook_secret } = integration.credentials
 
   // Call the Wix Velo HTTP function (has full backend inventory access)
