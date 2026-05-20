@@ -1,5 +1,5 @@
 import { createAdminClient } from './supabase/admin'
-import { syncInventoryToWix } from './wix-inventory'
+import { syncInventoryToWix, syncBundlesUsingSubProduct } from './wix-inventory'
 
 export type MovementType = 'receive' | 'reserve' | 'release' | 'ship' | 'adjust' | 'damage' | 'return' | 'cancel'
 
@@ -73,6 +73,8 @@ export async function recordInventoryMovement(params: {
     if (delta !== 0) {
       syncInventoryToWix(productId, orgId, delta).catch(() => {})
     }
+    // Re-sync any bundle products that use this as a sub-product
+    syncBundlesUsingSubProduct(productId, orgId).catch(() => {})
   }
 
   return { ok: true, qty_on_hand: newOnHand, qty_reserved: newReserved, qty_available: newAvailable }

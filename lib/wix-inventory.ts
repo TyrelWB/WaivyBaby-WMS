@@ -1,4 +1,5 @@
 import { createAdminClient } from './supabase/admin'
+import sql from './db'
 
 const CARRIER_NAMES: Record<string, string> = {
   ups: 'UPS',
@@ -78,6 +79,31 @@ export async function fulfillWixOrder(
   return error ? { ok: false, error } : { ok: true }
 }
 
+async function calculateBundleAvailability(productId: string): Promise<number | null> {
+  const components = await sql`
+    SELECT pc.quantity, COALESCE(i.qty_available, 0) AS qty_available
+    FROM public.product_components pc
+    LEFT JOIN public.inventory i ON i.product_id = pc.sub_product_id
+    WHERE pc.product_id = ${productId}
+  `
+  if ((components as any[]).length === 0) return null
+  let min = Infinity
+  for (const c of components as any[]) {
+    const canMake = Math.floor(c.qty_available / c.quantity)
+    if (canMake < min) min = canMake
+  }
+  return min === Infinity ? 0 : Math.max(0, min)
+}
+
+export async function syncBundlesUsingSubProduct(subProductId: string, orgId: string): Promise<void> {
+  const bundles = await sql`
+    SELECT DISTINCT product_id FROM public.product_components WHERE sub_product_id = ${subProductId}
+  `
+  for (const bundle of bundles as any[]) {
+    syncInventoryToWix(bundle.product_id, orgId).catch(() => {})
+  }
+}
+
 export async function syncInventoryToWix(productId: string, orgId: string, delta?: number): Promise<{ ok: boolean; error?: string }> {
   const admin = createAdminClient()
 
@@ -126,7 +152,8 @@ export async function syncInventoryToWix(productId: string, orgId: string, delta
     return { ok: false, error: 'Could not find Wix variant ID — check product has a SKU in Wix' }
   }
 
-  const availableQty = Math.max(0, inventory?.qty_on_hand || 0)
+  const bundleAvailable = await calculateBundleAvailability(productId)
+  const availableQty = bundleAvailable !== null ? bundleAvailable : Math.max(0, inventory?.qty_on_hand || 0)
   const { webhook_secret } = integration.credentials
 
   // Compute the delta to send to Wix.
