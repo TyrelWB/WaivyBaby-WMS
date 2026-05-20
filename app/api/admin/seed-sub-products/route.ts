@@ -70,10 +70,11 @@ const SUB_PRODUCT_NAMES = [
 ]
 
 function toSku(name: string): string {
-  return name
+  const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+  return `WMS-${slug}`
 }
 
 export async function POST() {
