@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Building2, LogOut, Save, AlertTriangle } from 'lucide-react'
+import { Building2, LogOut, Save, AlertTriangle, PackagePlus, CheckCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 type OrgSettings = {
@@ -37,6 +37,8 @@ export default function SettingsPage() {
   const [resetConfirm, setResetConfirm] = useState('')
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [importingSubProducts, setImportingSubProducts] = useState(false)
+  const [importResult, setImportResult] = useState<{ inserted: number; skipped: number } | null>(null)
 
   useEffect(() => { fetchSettings() }, [])
 
@@ -94,6 +96,21 @@ export default function SettingsPage() {
   async function handleLogout() {
     await supabase.auth.signOut()
     window.location.href = '/login'
+  }
+
+  async function importSubProducts() {
+    setImportingSubProducts(true)
+    setImportResult(null)
+    const res = await fetch('/api/admin/seed-sub-products', { method: 'POST' })
+    const data = await res.json()
+    if (!res.ok) {
+      toast.error(data.error || 'Import failed')
+    } else {
+      setImportResult({ inserted: data.inserted, skipped: data.skipped })
+      if (data.errors?.length > 0) toast.error(`${data.errors.length} item(s) failed to import`)
+      else toast.success(`Imported ${data.inserted} sub-products`)
+    }
+    setImportingSubProducts(false)
   }
 
   async function handleReset() {
@@ -210,6 +227,29 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Import Sub-Products */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-4">
+        <div className="flex items-center gap-2 mb-1">
+          <PackagePlus size={18} className="text-gray-400" />
+          <h2 className="font-semibold text-gray-900">Import Sub-Products</h2>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">Import the 63 pre-configured sub-products into your inventory. Safe to run multiple times — existing items are skipped.</p>
+        {importResult && (
+          <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2 mb-3">
+            <CheckCircle size={14} className="shrink-0" />
+            <span>{importResult.inserted} added, {importResult.skipped} already existed</span>
+          </div>
+        )}
+        <button
+          onClick={importSubProducts}
+          disabled={importingSubProducts}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          {importingSubProducts ? <Loader2 size={14} className="animate-spin" /> : <PackagePlus size={14} />}
+          {importingSubProducts ? 'Importing...' : 'Import Sub-Products'}
+        </button>
       </div>
 
       {/* Danger zone */}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, AlertTriangle, Plus, Minus, Edit2, Save, X, Barcode, MapPin, Camera, Loader2 } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Plus, Minus, Edit2, Save, X, Barcode, MapPin, Camera, Loader2, Package, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminContext } from '../../admin-context'
 
@@ -43,6 +43,21 @@ type AdjustmentRecord = {
   workers: { name: string } | null
 }
 
+type Component = {
+  sub_product_id: string
+  quantity: number
+  name: string
+  sku: string
+  image_url: string | null
+}
+
+type SubProduct = {
+  id: string
+  name: string
+  sku: string
+  image_url: string | null
+}
+
 export default function InventoryDetailPage() {
   const supabase = createClient()
   const params = useParams()
@@ -62,6 +77,72 @@ export default function InventoryDetailPage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [newBarcode, setNewBarcode] = useState('')
   const [addingBarcode, setAddingBarcode] = useState(false)
+  const [components, setComponents] = useState<Component[]>([])
+  const [subProducts, setSubProducts] = useState<SubProduct[]>([])
+  const [addingComponent, setAddingComponent] = useState(false)
+  const [componentSearch, setComponentSearch] = useState('')
+  const [componentQty, setComponentQty] = useState('1')
+  const [selectedSubProduct, setSelectedSubProduct] = useState<SubProduct | null>(null)
+  const [savingComponent, setSavingComponent] = useState(false)
+
+  async function fetchComponents() {
+    const res = await fetch(`/api/products/${productId}/components`)
+    if (res.ok) setComponents(await res.json())
+  }
+
+  async function fetchSubProducts() {
+    const res = await fetch('/api/products/sub-products')
+    if (res.ok) setSubProducts(await res.json())
+  }
+
+  async function addComponent() {
+    if (!selectedSubProduct || !componentQty) return
+    const qty = parseInt(componentQty)
+    if (isNaN(qty) || qty < 1) { toast.error('Invalid quantity'); return }
+    setSavingComponent(true)
+    const res = await fetch(`/api/products/${productId}/components`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sub_product_id: selectedSubProduct.id, quantity: qty }),
+    })
+    if (!res.ok) {
+      const d = await res.json()
+      toast.error(d.error || 'Failed to add component')
+    } else {
+      toast.success(`${selectedSubProduct.name} added to recipe`)
+      setAddingComponent(false)
+      setSelectedSubProduct(null)
+      setComponentSearch('')
+      setComponentQty('1')
+      fetchComponents()
+    }
+    setSavingComponent(false)
+  }
+
+  async function removeComponent(subProductId: string, name: string) {
+    const res = await fetch(`/api/products/${productId}/components`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sub_product_id: subProductId }),
+    })
+    if (!res.ok) {
+      toast.error('Failed to remove component')
+    } else {
+      toast.success(`${name} removed from recipe`)
+      fetchComponents()
+    }
+  }
+
+  async function updateComponentQty(subProductId: string, quantity: number) {
+    if (quantity < 1) return
+    const res = await fetch(`/api/products/${productId}/components`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sub_product_id: subProductId, quantity }),
+    })
+    if (!res.ok) toast.error('Failed to update quantity')
+    else fetchComponents()
+  }
 
   async function fetchProduct() {
     if (!orgId) { setLoading(false); return }
@@ -240,7 +321,11 @@ export default function InventoryDetailPage() {
     fetchProduct()
   }
 
-  useEffect(() => { fetchProduct() }, [productId, orgId])
+  useEffect(() => {
+    fetchProduct()
+    fetchComponents()
+    fetchSubProducts()
+  }, [productId, orgId])
 
   if (loading) return <div className="p-6 text-sm text-gray-400">Loading...</div>
   if (!product) return <div className="p-6 text-sm text-red-500">Product not found.</div>
@@ -458,6 +543,165 @@ export default function InventoryDetailPage() {
                 )}
                 <button onClick={() => removeBarcode(bc.id)} className="text-gray-300 hover:text-red-500 transition-colors">
                   <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Bundle Recipe */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Package size={16} className="text-gray-400" />
+            <h3 className="font-semibold text-gray-900 text-sm">Bundle Recipe</h3>
+            {components.length > 0 && (
+              <span className="text-xs bg-purple-100 text-purple-600 font-medium px-2 py-0.5 rounded-full">{components.length} items</span>
+            )}
+          </div>
+          <button
+            onClick={() => { setAddingComponent(!addingComponent); setSelectedSubProduct(null); setComponentSearch(''); setComponentQty('1') }}
+            className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          >
+            <Plus size={12} /> Add sub-product
+          </button>
+        </div>
+
+        {addingComponent && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-500 mb-2 font-medium">Search sub-products</p>
+            {!selectedSubProduct ? (
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  autoFocus
+                  value={componentSearch}
+                  onChange={e => setComponentSearch(e.target.value)}
+                  placeholder="Search by name or SKU..."
+                  className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {componentSearch && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-md max-h-48 overflow-y-auto">
+                    {subProducts
+                      .filter(sp =>
+                        (sp.name.toLowerCase().includes(componentSearch.toLowerCase()) ||
+                         sp.sku.toLowerCase().includes(componentSearch.toLowerCase())) &&
+                        !components.some(c => c.sub_product_id === sp.id)
+                      )
+                      .map(sp => (
+                        <button
+                          key={sp.id}
+                          onClick={() => { setSelectedSubProduct(sp); setComponentSearch('') }}
+                          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-blue-50 text-left"
+                        >
+                          {sp.image_url ? (
+                            <img src={sp.image_url} alt={sp.name} className="w-8 h-8 object-cover rounded border border-gray-100 shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded bg-gray-100 border border-gray-200 shrink-0 flex items-center justify-center">
+                              <Package size={12} className="text-gray-400" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{sp.name}</p>
+                            <p className="text-xs text-gray-400 font-mono">{sp.sku}</p>
+                          </div>
+                        </button>
+                      ))
+                    }
+                    {subProducts.filter(sp =>
+                      (sp.name.toLowerCase().includes(componentSearch.toLowerCase()) ||
+                       sp.sku.toLowerCase().includes(componentSearch.toLowerCase())) &&
+                      !components.some(c => c.sub_product_id === sp.id)
+                    ).length === 0 && (
+                      <p className="text-sm text-gray-400 px-3 py-2">No sub-products found</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                {selectedSubProduct.image_url ? (
+                  <img src={selectedSubProduct.image_url} alt={selectedSubProduct.name} className="w-10 h-10 object-cover rounded border border-gray-100 shrink-0" />
+                ) : (
+                  <div className="w-10 h-10 rounded bg-gray-100 border border-gray-200 shrink-0 flex items-center justify-center">
+                    <Package size={14} className="text-gray-400" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">{selectedSubProduct.name}</p>
+                  <p className="text-xs text-gray-400 font-mono">{selectedSubProduct.sku}</p>
+                </div>
+                <button onClick={() => setSelectedSubProduct(null)} className="text-gray-400 hover:text-gray-600">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            {selectedSubProduct && (
+              <div className="mt-3 flex items-center gap-2">
+                <label className="text-xs text-gray-500">Quantity per bundle:</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={componentQty}
+                  onChange={e => setComponentQty(e.target.value)}
+                  className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={addComponent}
+                  disabled={savingComponent}
+                  className="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-1.5 disabled:opacity-50 ml-auto"
+                >
+                  {savingComponent ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                  Add to recipe
+                </button>
+                <button onClick={() => { setAddingComponent(false); setSelectedSubProduct(null); setComponentSearch(''); setComponentQty('1') }} className="text-gray-400 hover:text-gray-600">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {components.length === 0 ? (
+          <p className="text-sm text-gray-400">No components yet. Add sub-products to define what makes up this bundle.</p>
+        ) : (
+          <div className="space-y-2">
+            {components.map(c => (
+              <div key={c.sub_product_id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                {c.image_url ? (
+                  <img src={c.image_url} alt={c.name} className="w-9 h-9 object-cover rounded border border-gray-100 shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded bg-gray-100 border border-gray-200 shrink-0 flex items-center justify-center">
+                    <Package size={12} className="text-gray-400" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
+                  <p className="text-xs text-gray-400 font-mono">{c.sku}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => updateComponentQty(c.sub_product_id, c.quantity - 1)}
+                    disabled={c.quantity <= 1}
+                    className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+                  >
+                    <Minus size={10} />
+                  </button>
+                  <span className="w-8 text-center text-sm font-semibold text-gray-900">{c.quantity}</span>
+                  <button
+                    onClick={() => updateComponentQty(c.sub_product_id, c.quantity + 1)}
+                    className="w-6 h-6 rounded border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-100"
+                  >
+                    <Plus size={10} />
+                  </button>
+                </div>
+                <button
+                  onClick={() => removeComponent(c.sub_product_id, c.name)}
+                  className="text-gray-300 hover:text-red-500 transition-colors ml-1"
+                >
+                  <Trash2 size={14} />
                 </button>
               </div>
             ))}

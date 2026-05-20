@@ -11,6 +11,9 @@ import CameraScanner from '@/components/CameraScanner'
 type WorkerSession = { workerId: string; name: string; role: string; orgId: string; warehouseId: string }
 type Order = { id: string; order_number: string; customer_name: string | null; is_rush: boolean; is_bulk: boolean; notes: string | null; status: string }
 type OrderItem = { id: string; product_id: string; quantity_ordered: number; quantity_picked: number; status: string; products: { name: string; sku: string; image_url: string | null } }
+type SubComponent = { sub_product_id: string; quantity: number; name: string; sku: string; image_url: string | null }
+type ComponentMap = { [productId: string]: SubComponent[] }
+type SubPickProgress = { [orderItemId: string]: { [subProductId: string]: number } }
 
 type PickStep = 'scan_basket' | 'picking' | 'complete'
 
@@ -29,6 +32,8 @@ export default function PickPage() {
   const [hardError, setHardError] = useState<{ message: string } | null>(null)
   const [shortPickItem, setShortPickItem] = useState<OrderItem | null>(null)
   const [shortPickQty, setShortPickQty] = useState(0)
+  const [componentMap, setComponentMap] = useState<ComponentMap>({})
+  const [subPickProgress, setSubPickProgress] = useState<SubPickProgress>({})
 
   useEffect(() => {
     fetch('/api/worker-session')
@@ -106,7 +111,7 @@ export default function PickPage() {
       const fetchedItems = await fetchItems(data.id)
 
       if (justAssigned && fetchedItems.length > 0) {
-        await reserveInventory(fetchedItems, session)
+        await fetch(`/api/orders/${data.id}/reserve`, { method: 'POST' })
       }
 
       try {
@@ -138,27 +143,13 @@ export default function PickPage() {
       .not('status', 'eq', 'picked')
     const result = data as unknown as OrderItem[] || []
     setItems(result)
+
+    const res = await fetch(`/api/orders/${orderId}/pick-components`)
+    if (res.ok) setComponentMap(await res.json())
+
     return result
   }
 
-  async function reserveInventory(itemList: OrderItem[], session: WorkerSession) {
-    for (const item of itemList) {
-      const qty = item.quantity_ordered - item.quantity_picked
-      if (qty <= 0) continue
-      const { data: inv } = await supabase
-        .from('inventory')
-        .select('id, qty_available, qty_reserved')
-        .eq('product_id', item.product_id)
-        .eq('org_id', session.orgId)
-        .single()
-      if (inv) {
-        await supabase.from('inventory').update({
-          qty_available: Math.max(0, inv.qty_available - qty),
-          qty_reserved: inv.qty_reserved + qty,
-        }).eq('id', inv.id)
-      }
-    }
-  }
 
   async function saveSession(data: { step: PickStep; orderId: string; basketBarcode: string | null }) {
     if (!worker) return
@@ -235,6 +226,54 @@ export default function PickPage() {
     setStep('picking')
   }
 
+  async function handleSubProductScan(subProductId: string, bundleItem: OrderItem, raw: string) {
+    if (!worker || !order) return
+    const components = componentMap[bundleItem.product_id]
+    const component = components?.find(c => c.sub_product_id === subProductId)
+    if (!component) return
+
+    const progress = subPickProgress[bundleItem.id] || {}
+    const currentCount = progress[subProductId] || 0
+    const totalRequired = component.quantity * bundleItem.quantity_ordered
+
+    if (currentCount >= totalRequired) {
+      playError()
+      setLastScan({ result: 'warning', message: `${component.name} already fully picked.` })
+      return
+    }
+
+    const newItemProgress = { ...progress, [subProductId]: currentCount + 1 }
+    const newSubPick = { ...subPickProgress, [bundleItem.id]: newItemProgress }
+    setSubPickProgress(newSubPick)
+
+    const { data: inv } = await supabase.from('inventory').select('id, qty_reserved, qty_picked').eq('product_id', subProductId).eq('org_id', worker.orgId).single()
+    if (inv) {
+      await supabase.from('inventory').update({ qty_reserved: Math.max(0, inv.qty_reserved - 1), qty_picked: inv.qty_picked + 1 }).eq('id', inv.id)
+    }
+
+    const bundleComplete = components.every(c => (newItemProgress[c.sub_product_id] || 0) >= c.quantity * bundleItem.quantity_ordered)
+
+    if (bundleComplete) {
+      await supabase.from('order_items').update({ quantity_picked: bundleItem.quantity_ordered, status: 'picked' }).eq('id', bundleItem.id)
+      playSuccess()
+      setLastScan({ result: 'success', message: `✓ Bundle ${bundleItem.products.name} complete!` })
+      const remaining = items.filter(i => i.id !== bundleItem.id)
+      setItems(remaining)
+      if (remaining.length === 0) {
+        await supabase.from('orders').update({ status: 'picked' }).eq('id', order.id)
+        await clearSession()
+        setStep('complete')
+      }
+    } else {
+      const totalPicked = Object.values(newItemProgress).reduce((a, b) => a + (b as number), 0)
+      const totalNeeded = components.reduce((a, c) => a + c.quantity * bundleItem.quantity_ordered, 0)
+      playSuccess()
+      setLastScan({ result: 'success', message: `✓ ${component.name} (${totalPicked}/${totalNeeded} bundle items)` })
+    }
+
+    await logScan(raw, 'product', 'pick', 'success', null)
+  }
+
   async function handleItemScan(parsed: ReturnType<typeof parseBarcode>) {
     if (!order || !worker) return
 
@@ -257,6 +296,13 @@ export default function PickPage() {
         status: 'open',
       })
       await logScan(parsed.raw, 'unknown', 'pick', 'error', 'Barcode not found in system')
+      return
+    }
+
+    // Check if scanned product is a sub-component of a bundle in this order
+    const bundleItem = items.find(i => componentMap[i.product_id]?.some(c => c.sub_product_id === productBarcode.product_id))
+    if (bundleItem) {
+      await handleSubProductScan(productBarcode.product_id, bundleItem, parsed.raw)
       return
     }
 
@@ -584,8 +630,48 @@ export default function PickPage() {
 
             <div className="space-y-3">
               <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Items to Pick</p>
-              {items.map(item => (
-                <div key={item.id} className={`bg-gray-900 border rounded-xl p-4 flex items-center gap-4 ${item.quantity_picked > 0 ? 'border-blue-800' : 'border-gray-800'}`}>
+              {items.map(item => {
+                const components = componentMap[item.product_id]
+                const isBundle = components && components.length > 0
+                if (isBundle) {
+                  const progress = subPickProgress[item.id] || {}
+                  const totalPicked = Object.values(progress).reduce((a, b) => a + (b as number), 0)
+                  const totalNeeded = components.reduce((a, c) => a + c.quantity * item.quantity_ordered, 0)
+                  return (
+                    <div key={item.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center shrink-0">
+                            {item.products.image_url ? <img src={item.products.image_url} alt="" className="w-full h-full object-cover rounded-lg" /> : <Package size={16} className="text-gray-600" />}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-white">{item.products.name}</p>
+                            <p className="text-xs text-gray-500">Bundle × {item.quantity_ordered}</p>
+                          </div>
+                        </div>
+                        <p className="text-xl font-bold text-blue-400 tabular-nums">{totalPicked}/{totalNeeded}</p>
+                      </div>
+                      <div className="space-y-2">
+                        {components.map(c => {
+                          const picked = progress[c.sub_product_id] || 0
+                          const required = c.quantity * item.quantity_ordered
+                          const done = picked >= required
+                          return (
+                            <div key={c.sub_product_id} className={`flex items-center justify-between px-3 py-2.5 rounded-lg ${done ? 'bg-green-950 border border-green-800' : 'bg-gray-800'}`}>
+                              <div>
+                                <p className={`text-sm font-medium ${done ? 'text-green-400' : 'text-white'}`}>{c.name}</p>
+                                <p className="text-xs text-gray-500">SKU: {c.sku}</p>
+                              </div>
+                              <p className={`text-lg font-bold tabular-nums ${done ? 'text-green-400' : 'text-white'}`}>{picked}/{required}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                }
+                return (
+                  <div key={item.id} className={`bg-gray-900 border rounded-xl p-4 flex items-center gap-4 ${item.quantity_picked > 0 ? 'border-blue-800' : 'border-gray-800'}`}>
                   <div className="w-14 h-14 bg-gray-800 rounded-lg flex items-center justify-center shrink-0">
                     {item.products.image_url ? (
                       <img src={item.products.image_url} alt="" className="w-full h-full object-cover rounded-lg" />
@@ -609,7 +695,8 @@ export default function PickPage() {
                     </p>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             <button

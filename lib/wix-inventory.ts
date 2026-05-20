@@ -31,47 +31,33 @@ export async function fulfillWixOrder(
     .eq('provider', 'wix')
     .single()
 
-  if (!integration?.credentials?.api_key || !integration?.credentials?.site_id) {
+  if (!integration?.credentials) {
     return { ok: false, error: 'Wix not configured' }
   }
 
-  const { api_key, site_id } = integration.credentials
-  const headers = {
-    'Authorization': api_key,
-    'wix-site-id': site_id,
-    'Content-Type': 'application/json',
-  }
-
-  const orderRes = await fetch(`https://www.wixapis.com/ecommerce/v1/orders/${order.wix_order_id}`, { headers })
-  if (!orderRes.ok) {
-    return { ok: false, error: `Wix order fetch failed (${orderRes.status})` }
-  }
-
-  const wixOrderData = await orderRes.json()
-  const lineItems: any[] = (wixOrderData.order || wixOrderData).lineItems || []
-  if (lineItems.length === 0) return { ok: false, error: 'No Wix line items' }
-
+  const { webhook_secret, api_key, site_id } = integration.credentials
   const carrierName = CARRIER_NAMES[order.carrier?.toLowerCase() || ''] || order.carrier || 'Other'
 
   let status = 'success'
   let error: string | undefined
 
   try {
-    const res = await fetch('https://www.wixapis.com/ecommerce/v1/fulfillments/createFulfillment', {
+    const res = await fetch('https://www.waivybaby.com/_functions/fulfillOrder', {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        secret: webhook_secret || 'waivybaby2024',
         orderId: order.wix_order_id,
-        fulfillment: {
-          lineItems: lineItems.map((li: any) => ({ id: li.id, quantity: li.quantity })),
-          trackingInfo: { trackingNumber: order.tracking_number, shippingProvider: carrierName, trackingLink: '' },
-        },
+        trackingNumber: order.tracking_number,
+        carrier: carrierName,
+        apiKey: api_key || '',
+        siteId: site_id || '',
       }),
     })
+    const data = await res.json().catch(() => ({}))
     if (!res.ok) {
-      const err = await res.text()
       status = 'failed'
-      error = `Wix fulfillment error (${res.status}): ${err.slice(0, 200)}`
+      error = `Velo fulfillment error (${res.status}): ${JSON.stringify(data).slice(0, 200)}`
     }
   } catch (e: any) {
     status = 'failed'
@@ -92,7 +78,7 @@ export async function fulfillWixOrder(
   return error ? { ok: false, error } : { ok: true }
 }
 
-export async function syncInventoryToWix(productId: string, orgId: string): Promise<{ ok: boolean; error?: string }> {
+export async function syncInventoryToWix(productId: string, orgId: string, delta?: number): Promise<{ ok: boolean; error?: string }> {
   const admin = createAdminClient()
 
   const [{ data: product }, { data: integration }, { data: inventory }] = await Promise.all([
@@ -103,6 +89,10 @@ export async function syncInventoryToWix(productId: string, orgId: string): Prom
 
   if (!product?.wix_inventory_item_id) {
     return { ok: false, error: 'Product not mapped to Wix — run Map Products first' }
+  }
+
+  if (!product.wix_product_id) {
+    return { ok: false, error: 'Product missing Wix product ID — re-run Map Products' }
   }
 
   if (!integration?.credentials?.api_key || !integration?.credentials?.site_id) {
@@ -139,6 +129,30 @@ export async function syncInventoryToWix(productId: string, orgId: string): Prom
   const availableQty = Math.max(0, inventory?.qty_on_hand || 0)
   const { webhook_secret } = integration.credentials
 
+  // Compute the delta to send to Wix.
+  // If called from a movement, delta is already known.
+  // If called from bulk Push Inventory (no delta), look up the last successfully synced qty
+  // from sync_logs and compute the difference — so we never call updateInventoryVariantFieldsByProductId
+  // which disables Wix inventory tracking.
+  let syncDelta: number
+  if (delta !== undefined) {
+    syncDelta = delta
+  } else {
+    const { data: lastSync } = await admin
+      .from('sync_logs')
+      .select('payload')
+      .eq('org_id', orgId)
+      .eq('provider', 'wix')
+      .eq('event_type', 'inventory_update')
+      .eq('reference_id', productId)
+      .eq('status', 'success')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const lastWixQty: number = lastSync?.payload?.availableQty ?? 0
+    syncDelta = availableQty - lastWixQty
+  }
+
   // Call the Wix Velo HTTP function (has full backend inventory access)
   const veloUrl = `https://www.waivybaby.com/_functions/updateInventory`
   const payload = {
@@ -146,7 +160,7 @@ export async function syncInventoryToWix(productId: string, orgId: string): Prom
     inventoryItemId: product.wix_inventory_item_id,
     productId: product.wix_product_id,
     variantId,
-    quantity: availableQty,
+    delta: syncDelta,
   }
 
   let status = 'success'
@@ -176,7 +190,7 @@ export async function syncInventoryToWix(productId: string, orgId: string): Prom
     status,
     reference_type: 'product',
     reference_id: productId,
-    payload: { productId, availableQty, sku: product.sku },
+    payload: { productId, availableQty, sku: product.sku, ...(delta !== undefined ? { delta } : {}) },
     response,
     error: error || null,
   })
@@ -192,6 +206,7 @@ export async function syncAllInventoryToWix(orgId: string): Promise<{ synced: nu
     .select('id, sku, wix_inventory_item_id')
     .eq('org_id', orgId)
     .not('wix_inventory_item_id', 'is', null)
+    .not('wix_product_id', 'is', null)
 
   if (!products || products.length === 0) return { synced: 0, failed: 0, errors: [] }
 

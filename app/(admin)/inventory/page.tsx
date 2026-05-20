@@ -16,6 +16,7 @@ type Product = {
   weight: number | null
   reorder_point: number
   image_url: string | null
+  is_sub_product: boolean
   supplier: { name: string } | null
   inventory: { qty_available: number; qty_on_hand: number; qty_reserved: number; qty_damaged: number; bin: { location_code: string } | null }[]
   barcodes: { barcode: string; is_primary: boolean }[]
@@ -40,6 +41,8 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all')
+  const [tab, setTab] = useState<'products' | 'sub-products'>('products')
+  const [subProductIds, setSubProductIds] = useState<Set<string>>(new Set())
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
@@ -49,13 +52,22 @@ export default function InventoryPage() {
   async function fetchProducts() {
     if (!orgId) { setLoading(false); return }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('products')
-      .select('id, name, sku, description, price, weight, reorder_point, image_url, supplier:suppliers(name), inventory(qty_available, qty_on_hand, qty_reserved, qty_damaged, bin:bins(location_code)), barcodes:product_barcodes(barcode, is_primary)')
+      .select('id, name, sku, description, price, weight, reorder_point, image_url, is_sub_product, supplier:suppliers(name), inventory(qty_available, qty_on_hand, qty_reserved, qty_damaged, bin:bins(location_code)), barcodes:product_barcodes(barcode, is_primary)')
       .eq('org_id', orgId)
       .order('name')
 
-    setProducts(data as unknown as Product[] || [])
+    if (error) {
+      const { data: fallback } = await supabase
+        .from('products')
+        .select('id, name, sku, description, price, weight, reorder_point, image_url, supplier:suppliers(name), inventory(qty_available, qty_on_hand, qty_reserved, qty_damaged, bin:bins(location_code)), barcodes:product_barcodes(barcode, is_primary)')
+        .eq('org_id', orgId)
+        .order('name')
+      setProducts(fallback as unknown as Product[] || [])
+    } else {
+      setProducts(data as unknown as Product[] || [])
+    }
     setLoading(false)
   }
 
@@ -124,11 +136,16 @@ export default function InventoryPage() {
       })
     }
 
+    if (tab === 'sub-products') {
+      await fetch(`/api/products/${product.id}/sub-product`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_sub_product: true }) })
+    }
+
     toast.success('Product created')
     setForm(emptyForm)
     setShowForm(false)
     setSaving(false)
     fetchProducts()
+    fetchSubProductIds()
   }
 
   async function adjustStock(productId: string, currentQty: number) {
@@ -211,7 +228,18 @@ export default function InventoryPage() {
     })
   }
 
-  useEffect(() => { fetchProducts() }, [orgId])
+  async function fetchSubProductIds() {
+    const res = await fetch('/api/products/sub-product-ids')
+    if (res.ok) {
+      const ids: string[] = await res.json()
+      setSubProductIds(new Set(ids))
+    }
+  }
+
+  useEffect(() => {
+    fetchProducts()
+    fetchSubProductIds()
+  }, [orgId])
 
   function getTotalStock(p: Product) {
     return p.inventory.reduce((s, i) => s + i.qty_on_hand, 0)
@@ -226,7 +254,9 @@ export default function InventoryPage() {
     return p.barcodes.find(b => b.is_primary)?.barcode || p.barcodes[0]?.barcode || null
   }
 
-  const filtered = products.filter(p => {
+  const tabProducts = products.filter(p => tab === 'sub-products' ? subProductIds.has(p.id) : !subProductIds.has(p.id))
+
+  const filtered = tabProducts.filter(p => {
     const q = search.toLowerCase()
     const matchSearch = !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)
     const stock = getTotalStock(p)
@@ -234,26 +264,39 @@ export default function InventoryPage() {
     return matchSearch && matchFilter
   })
 
-  const lowStockCount = products.filter(p => { const s = getTotalStock(p); return s > 0 && s <= p.reorder_point }).length
-  const outStockCount = products.filter(p => getTotalStock(p) === 0).length
+  const lowStockCount = tabProducts.filter(p => { const s = getTotalStock(p); return s > 0 && s <= p.reorder_point }).length
+  const outStockCount = tabProducts.filter(p => getTotalStock(p) === 0).length
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Inventory</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{products.length} SKUs · {lowStockCount > 0 && <span className="text-orange-500">{lowStockCount} low stock</span>}{lowStockCount > 0 && outStockCount > 0 && ' · '}{outStockCount > 0 && <span className="text-red-500">{outStockCount} out of stock</span>}</p>
+          <p className="text-sm text-gray-500 mt-0.5">{tabProducts.length} SKUs · {lowStockCount > 0 && <span className="text-orange-500">{lowStockCount} low stock</span>}{lowStockCount > 0 && outStockCount > 0 && ' · '}{outStockCount > 0 && <span className="text-red-500">{outStockCount} out of stock</span>}</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-          <Plus size={16} /> Add Product
+          <Plus size={16} /> {tab === 'sub-products' ? 'Add Sub-product' : 'Add Product'}
         </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200 mb-6">
+        {(['products', 'sub-products'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => { setTab(t); setShowForm(false); setSearch(''); setFilter('all') }}
+            className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors ${tab === t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+          >
+            {t === 'sub-products' ? 'Sub-products' : 'Products'}
+          </button>
+        ))}
       </div>
 
       {/* Add product form */}
       {showForm && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-gray-900">New Product</h2>
+            <h2 className="font-semibold text-gray-900">{tab === 'sub-products' ? 'New Sub-product' : 'New Product'}</h2>
             <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
           </div>
           <div className="grid grid-cols-3 gap-4">
@@ -325,7 +368,7 @@ export default function InventoryPage() {
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center">
             <Package size={36} className="text-gray-200 mx-auto mb-3" />
-            <p className="text-sm text-gray-400">{search || filter !== 'all' ? 'No products match.' : 'No products yet. Add your first product.'}</p>
+            <p className="text-sm text-gray-400">{search || filter !== 'all' ? 'No results match.' : tab === 'sub-products' ? 'No sub-products yet. Add your first sub-product.' : 'No products yet. Add your first product.'}</p>
           </div>
         ) : (
           <table className="w-full">
@@ -409,9 +452,22 @@ export default function InventoryPage() {
                       <div className="flex items-center gap-3">
                         <button onClick={() => adjustStock(product.id, totalStock)} className="text-xs text-blue-600 hover:text-blue-700 font-medium">Adjust</button>
                         <a href={`/inventory/${product.id}`} className="text-xs text-gray-500 hover:text-gray-700 font-medium">Details</a>
-                        <button onClick={() => pushToWix(product.id)} disabled={pushingWix === product.id} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium disabled:opacity-40">
-                          {pushingWix === product.id ? <Loader2 size={10} className="animate-spin" /> : <UploadCloud size={11} />}
-                          Update
+                        {!subProductIds.has(product.id) && (
+                          <button onClick={() => pushToWix(product.id)} disabled={pushingWix === product.id} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium disabled:opacity-40">
+                            {pushingWix === product.id ? <Loader2 size={10} className="animate-spin" /> : <UploadCloud size={11} />}
+                            Update
+                          </button>
+                        )}
+                        <button
+                          onClick={async () => {
+                            const is_sub_product = tab !== 'sub-products'
+                            const res = await fetch(`/api/products/${product.id}/sub-product`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_sub_product }) })
+                            if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Failed to update'); return }
+                            fetchSubProductIds()
+                          }}
+                          className="text-xs text-gray-400 hover:text-gray-600 font-medium"
+                        >
+                          {tab === 'sub-products' ? '→ Product' : '→ Sub-product'}
                         </button>
                         <button onClick={() => deleteProduct(product.id)} className="text-xs text-red-400 hover:text-red-600 font-medium">Delete</button>
                       </div>

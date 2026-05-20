@@ -69,8 +69,10 @@ export async function recordInventoryMovement(params: {
   })
 
   if (syncToWix) {
-    // fire-and-forget — don't block the caller
-    syncInventoryToWix(productId, orgId).catch(() => {})
+    const delta = newOnHand - (inv.qty_on_hand ?? 0)
+    if (delta !== 0) {
+      syncInventoryToWix(productId, orgId, delta).catch(() => {})
+    }
   }
 
   return { ok: true, qty_on_hand: newOnHand, qty_reserved: newReserved, qty_available: newAvailable }
