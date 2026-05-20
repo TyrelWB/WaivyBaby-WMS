@@ -1,5 +1,6 @@
 import { createAdminClient } from './supabase/admin'
 import { syncInventoryToWix, syncBundlesUsingSubProduct } from './wix-inventory'
+import sql from './db'
 
 export type MovementType = 'receive' | 'reserve' | 'release' | 'ship' | 'adjust' | 'damage' | 'return' | 'cancel'
 
@@ -16,44 +17,71 @@ export async function recordInventoryMovement(params: {
   const admin = createAdminClient()
   const { orgId, productId, movementType, quantityChange, referenceType, referenceId, note, syncToWix = true } = params
 
-  const { data: inv } = await admin
-    .from('inventory')
-    .select('qty_on_hand, qty_reserved')
-    .eq('product_id', productId)
-    .single()
+  const abs = Math.abs(quantityChange)
 
-  if (!inv) return { ok: false, error: 'Inventory record not found' }
-
-  let newOnHand = inv.qty_on_hand ?? 0
-  let newReserved = inv.qty_reserved ?? 0
-
+  let updateExpr: ReturnType<typeof sql>
   if (movementType === 'receive' || movementType === 'return') {
-    newOnHand = newOnHand + Math.abs(quantityChange)
+    updateExpr = sql`
+      UPDATE public.inventory SET
+        qty_on_hand   = qty_on_hand + ${abs},
+        qty_available = qty_on_hand + ${abs},
+        updated_at    = NOW()
+      WHERE product_id = ${productId}
+      RETURNING qty_on_hand, qty_reserved, qty_available
+    `
   } else if (movementType === 'adjust') {
-    newOnHand = Math.max(0, newOnHand + quantityChange)
+    updateExpr = sql`
+      UPDATE public.inventory SET
+        qty_on_hand   = GREATEST(0, qty_on_hand + ${quantityChange}),
+        qty_available = GREATEST(0, qty_on_hand + ${quantityChange}),
+        updated_at    = NOW()
+      WHERE product_id = ${productId}
+      RETURNING qty_on_hand, qty_reserved, qty_available
+    `
   } else if (movementType === 'reserve') {
-    // Move from on hand into reserved
-    newOnHand = Math.max(0, newOnHand - Math.abs(quantityChange))
-    newReserved = newReserved + Math.abs(quantityChange)
+    updateExpr = sql`
+      UPDATE public.inventory SET
+        qty_available = qty_available - ${abs},
+        qty_reserved  = qty_reserved  + ${abs},
+        updated_at    = NOW()
+      WHERE product_id = ${productId} AND qty_available >= ${abs}
+      RETURNING qty_on_hand, qty_reserved, qty_available
+    `
   } else if (movementType === 'release' || movementType === 'cancel') {
-    // Move back from reserved to on hand
-    newReserved = Math.max(0, newReserved - Math.abs(quantityChange))
-    newOnHand = newOnHand + Math.abs(quantityChange)
+    updateExpr = sql`
+      UPDATE public.inventory SET
+        qty_reserved  = GREATEST(0, qty_reserved - ${abs}),
+        qty_available = qty_available + ${abs},
+        updated_at    = NOW()
+      WHERE product_id = ${productId}
+      RETURNING qty_on_hand, qty_reserved, qty_available
+    `
   } else if (movementType === 'ship') {
-    // Item leaves warehouse — remove from reserved
-    newReserved = Math.max(0, newReserved - Math.abs(quantityChange))
-  } else if (movementType === 'damage') {
-    newOnHand = Math.max(0, newOnHand - Math.abs(quantityChange))
+    updateExpr = sql`
+      UPDATE public.inventory SET
+        qty_reserved = GREATEST(0, qty_reserved - ${abs}),
+        updated_at   = NOW()
+      WHERE product_id = ${productId}
+      RETURNING qty_on_hand, qty_reserved, qty_available
+    `
+  } else {
+    // damage
+    updateExpr = sql`
+      UPDATE public.inventory SET
+        qty_on_hand   = GREATEST(0, qty_on_hand - ${abs}),
+        qty_available = GREATEST(0, qty_available - ${abs}),
+        updated_at    = NOW()
+      WHERE product_id = ${productId}
+      RETURNING qty_on_hand, qty_reserved, qty_available
+    `
   }
 
-  const newAvailable = newOnHand
+  const rows = await updateExpr as unknown as any[]
+  if (rows.length === 0) return { ok: false, error: 'Insufficient stock or inventory record not found' }
 
-  await admin.from('inventory').update({
-    qty_on_hand: newOnHand,
-    qty_reserved: newReserved,
-    qty_available: newAvailable,
-    updated_at: new Date().toISOString(),
-  }).eq('product_id', productId)
+  const newOnHand = rows[0].qty_on_hand
+  const newReserved = rows[0].qty_reserved
+  const newAvailable = rows[0].qty_available
 
   await admin.from('inventory_movements').insert({
     org_id: orgId,
@@ -69,11 +97,7 @@ export async function recordInventoryMovement(params: {
   })
 
   if (syncToWix) {
-    const delta = newOnHand - (inv.qty_on_hand ?? 0)
-    if (delta !== 0) {
-      syncInventoryToWix(productId, orgId, delta).catch(() => {})
-    }
-    // Re-sync any bundle products that use this as a sub-product
+    syncInventoryToWix(productId, orgId).catch(() => {})
     syncBundlesUsingSubProduct(productId, orgId).catch(() => {})
   }
 

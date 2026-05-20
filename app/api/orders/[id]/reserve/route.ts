@@ -28,6 +28,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     componentMap[c.product_id].push({ sub_product_id: c.sub_product_id, quantity: c.quantity })
   }
 
+  const insufficient: string[] = []
+
   for (const item of items as any[]) {
     const qty = item.quantity_ordered - item.quantity_picked
     if (qty <= 0) continue
@@ -35,35 +37,37 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const itemComponents = componentMap[item.product_id]
 
     if (itemComponents && itemComponents.length > 0) {
-      // Bundle: reserve each sub-product
       for (const component of itemComponents) {
         const reserveQty = component.quantity * qty
-        const { data: inv } = await admin
-          .from('inventory')
-          .select('id, qty_available, qty_reserved')
-          .eq('product_id', component.sub_product_id)
-          .single()
-        if (inv) {
-          await admin.from('inventory').update({
-            qty_available: Math.max(0, inv.qty_available - reserveQty),
-            qty_reserved: inv.qty_reserved + reserveQty,
-          }).eq('id', inv.id)
+        const updated = await sql`
+          UPDATE public.inventory
+          SET qty_available = qty_available - ${reserveQty},
+              qty_reserved  = qty_reserved  + ${reserveQty}
+          WHERE product_id = ${component.sub_product_id}
+            AND qty_available >= ${reserveQty}
+          RETURNING id
+        `
+        if ((updated as any[]).length === 0) {
+          insufficient.push(component.sub_product_id)
         }
       }
     } else {
-      // Regular product: reserve as normal
-      const { data: inv } = await admin
-        .from('inventory')
-        .select('id, qty_available, qty_reserved')
-        .eq('product_id', item.product_id)
-        .single()
-      if (inv) {
-        await admin.from('inventory').update({
-          qty_available: Math.max(0, inv.qty_available - qty),
-          qty_reserved: inv.qty_reserved + qty,
-        }).eq('id', inv.id)
+      const updated = await sql`
+        UPDATE public.inventory
+        SET qty_available = qty_available - ${qty},
+            qty_reserved  = qty_reserved  + ${qty}
+        WHERE product_id = ${item.product_id}
+          AND qty_available >= ${qty}
+        RETURNING id
+      `
+      if ((updated as any[]).length === 0) {
+        insufficient.push(item.product_id)
       }
     }
+  }
+
+  if (insufficient.length > 0) {
+    return NextResponse.json({ ok: false, insufficient }, { status: 409 })
   }
 
   return NextResponse.json({ ok: true })
