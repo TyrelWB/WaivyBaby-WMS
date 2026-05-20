@@ -20,6 +20,8 @@ type Order = {
   assigned_picker_id: string | null
   assigned_packer_id: string | null
   basket_id: string | null
+  pick_started_at: string | null
+  pick_completed_at: string | null
   carrier: string | null
   tracking_number: string | null
   shipping_name: string | null
@@ -448,6 +450,44 @@ export default function OrderDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Pick Performance (admin only — not shown to pickers) */}
+          {(order.pick_started_at || order.pick_completed_at) && (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <h3 className="font-semibold text-gray-900 mb-3 text-sm">Pick Performance</h3>
+              <div className="space-y-2 text-sm">
+                {order.pick_started_at && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Started</span>
+                    <span className="font-medium text-gray-900">{new Date(order.pick_started_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                  </div>
+                )}
+                {order.pick_completed_at && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Completed</span>
+                    <span className="font-medium text-gray-900">{new Date(order.pick_completed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                  </div>
+                )}
+                {order.pick_started_at && order.pick_completed_at && (() => {
+                  const secs = Math.round((new Date(order.pick_completed_at).getTime() - new Date(order.pick_started_at).getTime()) / 1000)
+                  const mins = Math.floor(secs / 60)
+                  const s = secs % 60
+                  return (
+                    <div className="flex justify-between border-t border-gray-100 pt-2 mt-2">
+                      <span className="text-gray-500 font-medium">Duration</span>
+                      <span className="font-bold text-blue-600">{mins > 0 ? `${mins}m ` : ''}{s}s</span>
+                    </div>
+                  )
+                })()}
+                {order.pick_started_at && !order.pick_completed_at && (
+                  <div className="flex justify-between border-t border-gray-100 pt-2 mt-2">
+                    <span className="text-gray-500 font-medium">In progress</span>
+                    <span className="text-yellow-600 font-medium">Picking now...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Basket + Boxes */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
