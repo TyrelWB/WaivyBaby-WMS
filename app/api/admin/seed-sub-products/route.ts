@@ -69,12 +69,8 @@ const SUB_PRODUCT_NAMES = [
   'Wipes Holder',
 ]
 
-function toSku(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return `WMS-${slug}`
+function toSku(index: number): string {
+  return `WMS-${String(index + 1).padStart(3, '0')}`
 }
 
 export async function POST() {
@@ -92,8 +88,9 @@ export async function POST() {
   const skipped: string[] = []
   const errors: string[] = []
 
-  for (const name of SUB_PRODUCT_NAMES) {
-    const sku = toSku(name)
+  for (let i = 0; i < SUB_PRODUCT_NAMES.length; i++) {
+    const name = SUB_PRODUCT_NAMES[i]
+    const sku = toSku(i)
     try {
       // Check if already exists
       const existing = await sql`
