@@ -35,18 +35,40 @@ export default function PackPage() {
     fetch('/api/worker-session')
       .then(r => r.ok ? r.json() : null)
       .then(session => {
-        if (session) {
-          setWorker(session)
-          fetchAssignedOrder(session)
-        } else {
-          setLoading(false)
-        }
+        if (session) { setWorker(session); fetchAssignedOrder(session) }
+        else setLoading(false)
       })
     scanRef.current?.focus()
   }, [])
 
+  // Realtime: grab new orders the instant picking is complete
+  useEffect(() => {
+    if (!worker) return
+    const channel = supabase
+      .channel(`packer-${worker.workerId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'orders',
+        filter: `status=eq.picked`,
+      }, () => {
+        setOrder(prev => { if (!prev) fetchAssignedOrder(worker); return prev })
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'orders',
+        filter: `assigned_packer_id=eq.${worker.workerId}`,
+      }, () => {
+        setOrder(prev => { if (!prev) fetchAssignedOrder(worker); return prev })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [worker])
+
   async function fetchAssignedOrder(session: WorkerSession) {
-    const { data } = await supabase
+    // Check for an order already assigned to this packer
+    let { data } = await supabase
       .from('orders')
       .select('id, order_number, customer_name, is_rush, is_bulk, notes, total_boxes, basket_id')
       .eq('assigned_packer_id', session.workerId)
@@ -55,6 +77,37 @@ export default function PackPage() {
       .order('created_at', { ascending: true })
       .limit(1)
       .single()
+
+    // Auto-grab next picked order with no packer assigned
+    if (!data && session.orgId) {
+      const { data: next } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('org_id', session.orgId)
+        .eq('status', 'picked')
+        .is('assigned_packer_id', null)
+        .order('is_rush', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single()
+
+      if (next) {
+        const { error } = await supabase
+          .from('orders')
+          .update({ assigned_packer_id: session.workerId, status: 'packing' })
+          .eq('id', next.id)
+          .is('assigned_packer_id', null)
+
+        if (!error) {
+          const { data: assigned } = await supabase
+            .from('orders')
+            .select('id, order_number, customer_name, is_rush, is_bulk, notes, total_boxes, basket_id')
+            .eq('id', next.id)
+            .single()
+          data = assigned
+        }
+      }
+    }
 
     if (data) {
       setOrder(data)
@@ -359,7 +412,7 @@ export default function PackPage() {
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
             <CheckCircle size={48} className="text-green-400" />
             <p className="text-xl font-bold text-white">No orders to pack</p>
-            <p className="text-gray-500 text-sm">Check with your manager for your next assignment.</p>
+            <p className="text-gray-500 text-sm">You'll be assigned automatically when a picker finishes.</p>
           </div>
         ) : step === 'scan_basket' ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
