@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Warehouse,
   BarChart2, Settings, LogOut, ChevronLeft, ChevronRight,
-  AlertTriangle, Truck, RotateCcw, ShoppingBasket, Building2, Link2, FileText, Search
+  AlertTriangle, Truck, RotateCcw, ShoppingBasket, Building2, Link2, FileText, Search, Tag
 } from 'lucide-react'
 
 const groups = [
@@ -32,6 +32,7 @@ const groups = [
     label: 'Warehouse',
     links: [
       { label: 'Inventory', href: '/inventory', icon: Package },
+      { label: 'Print Labels', href: '/print/labels', icon: Tag },
       { label: 'Baskets', href: '/baskets', icon: ShoppingBasket },
     ]
   },

@@ -117,6 +117,13 @@ export async function POST() {
         ON CONFLICT DO NOTHING
       `
 
+      // Register SKU as scannable barcode
+      await sql`
+        INSERT INTO public.product_barcodes (product_id, barcode, org_id)
+        VALUES (${product.id}, ${sku}, ${org_id})
+        ON CONFLICT DO NOTHING
+      `
+
       inserted.push(name)
     } catch (e: any) {
       errors.push(`${name}: ${e.message}`)
