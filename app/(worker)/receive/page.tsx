@@ -3,17 +3,29 @@
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { parseBarcode } from '@/lib/barcode'
-import { Scan, CheckCircle, XCircle, Package, Truck, LogOut, ChevronRight, Camera } from 'lucide-react'
+import { Scan, CheckCircle, XCircle, Package, Truck, LogOut, ChevronRight, Camera, Printer, Plus, Minus, X } from 'lucide-react'
 import CameraScanner from '@/components/CameraScanner'
 import { toast } from 'sonner'
 import { playSuccess, playError } from '@/lib/feedback'
 import { writeAudit } from '@/lib/audit'
+import JsBarcode from 'jsbarcode'
 
 type WorkerSession = { workerId: string; name: string; role: string; orgId: string; warehouseId: string }
 type ReceivingRecord = { id: string; reference_number: string | null; supplier_name: string | null; status: string }
 type ReceivingItem = { id: string; product_id: string; quantity_expected: number | null; quantity_received: number; status: string; products: { name: string; sku: string } }
 
 type ReceiveStep = 'select_record' | 'receiving' | 'complete'
+
+function BarcodeLabel({ value }: { value: string }) {
+  const ref = useRef<SVGSVGElement>(null)
+  useEffect(() => {
+    if (!ref.current || !value) return
+    try {
+      JsBarcode(ref.current, value, { format: 'CODE128', width: 1.8, height: 44, displayValue: false, margin: 0 })
+    } catch {}
+  }, [value])
+  return <svg ref={ref} style={{ width: '100%', maxHeight: '44px' }} />
+}
 
 export default function ReceivePage() {
   const supabase = createClient()
@@ -28,17 +40,15 @@ export default function ReceivePage() {
   const [loading, setLoading] = useState(true)
   const [showCamera, setShowCamera] = useState(false)
   const [receiveProgress, setReceiveProgress] = useState<Record<string, number>>({})
+  const [showPrintModal, setShowPrintModal] = useState(false)
+  const [printCopies, setPrintCopies] = useState<Record<string, number>>({})
 
   useEffect(() => {
     fetch('/api/worker-session')
       .then(r => r.ok ? r.json() : null)
       .then(session => {
-        if (session) {
-          setWorker(session)
-          fetchOpenRecords(session)
-        } else {
-          setLoading(false)
-        }
+        if (session) { setWorker(session); fetchOpenRecords(session) }
+        else setLoading(false)
       })
     scanRef.current?.focus()
   }, [])
@@ -59,7 +69,12 @@ export default function ReceivePage() {
       .from('receiving_items')
       .select('id, product_id, quantity_expected, quantity_received, status, products(name, sku)')
       .eq('receiving_id', record.id)
-    setItems(data as unknown as ReceivingItem[] || [])
+    const loaded = data as unknown as ReceivingItem[] || []
+    setItems(loaded)
+    // Default print copies to quantity_expected per item
+    const defaults: Record<string, number> = {}
+    for (const item of loaded) defaults[item.id] = item.quantity_expected || 1
+    setPrintCopies(defaults)
     setActiveRecord(record)
     setStep('receiving')
     scanRef.current?.focus()
@@ -110,7 +125,6 @@ export default function ReceivePage() {
       status: done ? 'received' : newQty > 0 ? 'partial' : 'pending',
     }).eq('id', item.id)
 
-    // Update inventory
     const { data: inv } = await supabase.from('inventory').select('id, qty_on_hand, qty_available').eq('product_id', item.product_id).eq('org_id', worker.orgId).single()
     if (inv) {
       await supabase.from('inventory').update({
@@ -118,11 +132,8 @@ export default function ReceivePage() {
         qty_available: inv.qty_available + 1,
       }).eq('id', inv.id)
       await writeAudit(supabase, {
-        orgId: worker.orgId,
-        workerId: worker.workerId,
-        action: 'inventory_adjusted',
-        entityType: 'inventory',
-        entityId: inv.id,
+        orgId: worker.orgId, workerId: worker.workerId,
+        action: 'inventory_adjusted', entityType: 'inventory', entityId: inv.id,
         changes: { product: item.products.name, qty_on_hand: inv.qty_on_hand + 1, qty_available: inv.qty_available + 1 },
         note: `Received via receiving record`,
       })
@@ -132,7 +143,6 @@ export default function ReceivePage() {
     playSuccess()
     setLastScan({ result: 'success', message: `✓ ${item.products.name} (${newQty}${expected > 0 ? `/${expected}` : ''})` })
 
-    // Check if all received
     const allDone = items.every(i => {
       const q = i.id === item.id ? newQty : (newProgress[i.id] ?? i.quantity_received)
       return !i.quantity_expected || q >= i.quantity_expected
@@ -146,13 +156,8 @@ export default function ReceivePage() {
   async function logScan(barcode: string, type: string, action: string, result: string, errorMsg: string | null) {
     if (!worker || !activeRecord) return
     await supabase.from('scan_events').insert({
-      org_id: worker.orgId,
-      worker_id: worker.workerId,
-      barcode,
-      barcode_type: type,
-      scan_action: action,
-      result,
-      error_message: errorMsg,
+      org_id: worker.orgId, worker_id: worker.workerId,
+      barcode, barcode_type: type, scan_action: action, result, error_message: errorMsg,
     })
   }
 
@@ -166,8 +171,114 @@ export default function ReceivePage() {
   const progressPct = totalExpected ? Math.round((totalReceived / totalExpected) * 100) : 0
   const allDone = totalExpected > 0 && totalReceived >= totalExpected
 
+  // Build flat list of labels for printing
+  const printLabels = items.flatMap(item =>
+    Array.from({ length: printCopies[item.id] || 0 }, () => item)
+  )
+  const totalPrintLabels = printLabels.length
+
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+
+      {/* Print styles */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #receive-print-area, #receive-print-area * { visibility: visible !important; }
+          #receive-print-area {
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            width: 100% !important;
+            padding: 0 !important; margin: 0 !important;
+          }
+          @page { size: 2.25in 1.25in; margin: 0; }
+        }
+      `}</style>
+
+      {/* Hidden print area */}
+      <div id="receive-print-area" className="hidden print:block">
+        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+          {printLabels.map((item, i) => (
+            <div key={i} style={{
+              width: '2.25in', height: '1.25in',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              padding: '4px 8px', boxSizing: 'border-box',
+              pageBreakAfter: 'always', breakAfter: 'page',
+            }}>
+              <PrintBarcode value={item.products.sku} />
+              <p style={{ fontSize: '9pt', fontWeight: 'bold', fontFamily: 'monospace', margin: '2px 0 1px', letterSpacing: '0.05em' }}>{item.products.sku}</p>
+              <p style={{ fontSize: '7pt', fontFamily: 'sans-serif', margin: 0, textAlign: 'center', lineHeight: 1.2 }}>{item.products.name}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Print labels modal */}
+      {showPrintModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+              <div>
+                <p className="font-bold text-white">Print Barcode Labels</p>
+                <p className="text-xs text-gray-500 mt-0.5">Set how many labels to print per item</p>
+              </div>
+              <button onClick={() => setShowPrintModal(false)} className="text-gray-500 hover:text-gray-300">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+              {items.map(item => (
+                <div key={item.id} className="flex items-center gap-3 bg-gray-800 rounded-xl px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{item.products.name}</p>
+                    <p className="text-xs text-gray-400 font-mono">{item.products.sku}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setPrintCopies(p => ({ ...p, [item.id]: Math.max(0, (p[item.id] || 0) - 1) }))}
+                      className="w-7 h-7 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300"
+                    >
+                      <Minus size={12} />
+                    </button>
+                    <input
+                      type="number"
+                      min={0}
+                      max={999}
+                      value={printCopies[item.id] ?? 0}
+                      onChange={e => setPrintCopies(p => ({ ...p, [item.id]: Math.max(0, parseInt(e.target.value) || 0) }))}
+                      className="w-12 text-center bg-gray-700 border border-gray-600 rounded-lg text-sm font-bold py-1 text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                    <button
+                      onClick={() => setPrintCopies(p => ({ ...p, [item.id]: (p[item.id] || 0) + 1 }))}
+                      className="w-7 h-7 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-300"
+                    >
+                      <Plus size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-800 flex items-center justify-between gap-3">
+              <p className="text-sm text-gray-400">{totalPrintLabels} label{totalPrintLabels !== 1 ? 's' : ''} total</p>
+              <div className="flex gap-2">
+                <button onClick={() => setShowPrintModal(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-700 rounded-lg">
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowPrintModal(false); setTimeout(() => window.print(), 100) }}
+                  disabled={totalPrintLabels === 0}
+                  className="flex items-center gap-2 bg-green-700 hover:bg-green-600 disabled:opacity-40 text-white px-5 py-2 rounded-lg text-sm font-semibold"
+                >
+                  <Printer size={15} /> Print {totalPrintLabels > 0 ? totalPrintLabels : ''} Labels
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between px-8 py-4 border-b border-gray-800 shrink-0">
@@ -202,7 +313,7 @@ export default function ReceivePage() {
         </div>
       </div>
 
-      {/* Hidden scan input (barcode gun target) */}
+      {/* Hidden scan input */}
       <input
         ref={scanRef}
         value={scanInput}
@@ -220,10 +331,8 @@ export default function ReceivePage() {
         />
       )}
 
-      {/* Loading */}
       {loading && <div className="flex-1 flex items-center justify-center text-gray-500">Loading...</div>}
 
-      {/* Select record — full-width centered grid */}
       {!loading && step === 'select_record' && (
         <div className="flex-1 flex flex-col px-8 py-8">
           <p className="text-xl font-bold text-white mb-1">Select Shipment</p>
@@ -239,7 +348,7 @@ export default function ReceivePage() {
                 <button
                   key={record.id}
                   onClick={() => selectRecord(record)}
-                  className="flex items-center gap-4 bg-gray-900 border border-gray-800 hover:border-green-700 active:bg-gray-800 rounded-xl p-5 transition-colors text-left"
+                  className="flex items-center gap-4 bg-gray-900 border border-gray-800 hover:border-green-700 rounded-xl p-5 transition-colors text-left"
                 >
                   <div className="w-12 h-12 bg-green-900 rounded-lg flex items-center justify-center shrink-0">
                     <Truck size={20} className="text-green-400" />
@@ -256,7 +365,6 @@ export default function ReceivePage() {
         </div>
       )}
 
-      {/* Complete */}
       {!loading && step === 'complete' && (
         <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
           <div className="w-20 h-20 bg-green-900 rounded-2xl flex items-center justify-center">
@@ -275,11 +383,10 @@ export default function ReceivePage() {
         </div>
       )}
 
-      {/* Receiving — two-column desktop layout */}
       {!loading && step === 'receiving' && (
         <div className="flex-1 flex overflow-hidden">
 
-          {/* Left panel: shipment info + items list */}
+          {/* Left panel: items list */}
           <div className="w-72 xl:w-80 border-r border-gray-800 flex flex-col bg-gray-900/20 shrink-0">
             <div className="px-4 py-4 border-b border-gray-800">
               <p className="font-bold text-white">{activeRecord?.supplier_name || 'No supplier'}</p>
@@ -303,10 +410,7 @@ export default function ReceivePage() {
                 const expected = item.quantity_expected || 0
                 const done = expected > 0 && received >= expected
                 return (
-                  <div
-                    key={item.id}
-                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 ${done ? 'bg-green-950/30 border border-green-900/50' : received > 0 ? 'bg-gray-800' : 'bg-gray-800/50'}`}
-                  >
+                  <div key={item.id} className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 ${done ? 'bg-green-950/30 border border-green-900/50' : received > 0 ? 'bg-gray-800' : 'bg-gray-800/50'}`}>
                     <div className="w-8 h-8 bg-gray-700 rounded flex items-center justify-center shrink-0">
                       <Package size={12} className="text-gray-500" />
                     </div>
@@ -326,7 +430,7 @@ export default function ReceivePage() {
             </div>
           </div>
 
-          {/* Right panel: scan + feedback */}
+          {/* Right panel: scan + actions */}
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Scan bar */}
             <div className="px-6 py-4 border-b border-gray-800 bg-gray-900/30 shrink-0">
@@ -339,17 +443,10 @@ export default function ReceivePage() {
                   placeholder="Scan barcode or type and press Enter..."
                   autoComplete="off"
                 />
-                <button
-                  onClick={() => setShowCamera(true)}
-                  className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg border border-gray-700"
-                  title="Use camera"
-                >
+                <button onClick={() => setShowCamera(true)} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg border border-gray-700">
                   <Camera size={18} />
                 </button>
-                <button
-                  onClick={() => handleScan(scanInput)}
-                  className="bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold"
-                >
+                <button onClick={() => handleScan(scanInput)} className="bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">
                   Scan
                 </button>
               </div>
@@ -364,12 +461,19 @@ export default function ReceivePage() {
             </div>
 
             {/* Main area */}
-            <div className="flex-1 flex flex-col items-center justify-center px-8 gap-5 overflow-y-auto py-8">
+            <div className="flex-1 flex flex-col items-center justify-center px-8 gap-4 overflow-y-auto py-8">
               <button
                 onClick={() => scanRef.current?.focus()}
                 className="w-full max-w-lg flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white py-4 rounded-xl font-bold text-lg transition-colors"
               >
                 <Scan size={20} /> Click to Focus Scanner
+              </button>
+
+              <button
+                onClick={() => setShowPrintModal(true)}
+                className="w-full max-w-lg flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-green-400 py-4 rounded-xl font-bold text-lg transition-colors border border-gray-700"
+              >
+                <Printer size={20} /> Print Barcode Labels
               </button>
 
               {allDone && (
@@ -389,4 +493,16 @@ export default function ReceivePage() {
       )}
     </div>
   )
+}
+
+// Barcode for the hidden print area (runs after modal closes + setTimeout)
+function PrintBarcode({ value }: { value: string }) {
+  const ref = useRef<SVGSVGElement>(null)
+  useEffect(() => {
+    if (!ref.current) return
+    try {
+      JsBarcode(ref.current, value, { format: 'CODE128', width: 1.5, height: 40, displayValue: false, margin: 0 })
+    } catch {}
+  }, [value])
+  return <svg ref={ref} style={{ width: '100%', maxHeight: '40px' }} />
 }
