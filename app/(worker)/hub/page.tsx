@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ShoppingBasket, Package, Truck, LogOut } from 'lucide-react'
+import { ShoppingBasket, Package, Truck, Send, LogOut } from 'lucide-react'
 
 type WorkerSession = { workerId: string; name: string; role: string; orgId: string; warehouseId: string }
 
@@ -22,6 +22,7 @@ export default function WorkerHubPage() {
   const tasks = [
     { label: 'Picking', description: 'Collect items for orders', href: '/pick', icon: ShoppingBasket, color: 'bg-blue-600 hover:bg-blue-500', iconBg: 'bg-blue-700' },
     { label: 'Packing', description: 'Pack picked orders into boxes', href: '/pack', icon: Package, color: 'bg-purple-600 hover:bg-purple-500', iconBg: 'bg-purple-700' },
+    { label: 'Shipping', description: 'Ship packed orders out', href: '/ship', icon: Send, color: 'bg-orange-600 hover:bg-orange-500', iconBg: 'bg-orange-700' },
     { label: 'Receiving', description: 'Check in incoming shipments', href: '/receive', icon: Truck, color: 'bg-green-600 hover:bg-green-500', iconBg: 'bg-green-700' },
   ]
 

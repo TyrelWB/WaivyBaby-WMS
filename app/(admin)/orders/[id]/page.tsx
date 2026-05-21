@@ -19,6 +19,7 @@ type Order = {
   notes: string | null
   assigned_picker_id: string | null
   assigned_packer_id: string | null
+  assigned_shipper_id: string | null
   basket_id: string | null
   pick_started_at: string | null
   pick_completed_at: string | null
@@ -288,6 +289,7 @@ export default function OrderDetailPage() {
   const totalCount = items.reduce((s, i) => s + i.quantity_ordered, 0)
   const pickers = workers.filter(w => w.role === 'picker' || w.role === 'all')
   const packers = workers.filter(w => w.role === 'packer' || w.role === 'all')
+  const shippers = workers.filter(w => w.role === 'shipper' || w.role === 'all')
 
   return (
     <div className="p-6 max-w-7xl">
@@ -431,6 +433,13 @@ export default function OrderDetailPage() {
                 <select value={order.assigned_packer_id || ''} onChange={e => updateOrder({ assigned_packer_id: e.target.value || null })} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">—</option>
                   {packers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Shipper</label>
+                <select value={order.assigned_shipper_id || ''} onChange={e => updateOrder({ assigned_shipper_id: e.target.value || null })} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">—</option>
+                  {shippers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
               </div>
             </div>

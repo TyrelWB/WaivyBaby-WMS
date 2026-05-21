@@ -20,8 +20,9 @@ const emptyForm = { name: '', pin: '', role: 'picker' }
 const roleColors: Record<string, string> = {
   picker: 'bg-blue-100 text-blue-700',
   packer: 'bg-purple-100 text-purple-700',
+  shipper: 'bg-orange-100 text-orange-700',
   receiver: 'bg-green-100 text-green-700',
-  all: 'bg-orange-100 text-orange-700',
+  all: 'bg-gray-100 text-gray-700',
 }
 
 export default function WorkersPage() {
@@ -151,6 +152,7 @@ export default function WorkersPage() {
               <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="picker">Picker</option>
                 <option value="packer">Packer</option>
+                <option value="shipper">Shipper</option>
                 <option value="receiver">Receiver</option>
                 <option value="all">All Roles</option>
               </select>
