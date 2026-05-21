@@ -44,7 +44,6 @@ export default function ShipPage() {
       })
   }, [])
 
-  // Realtime: grab new orders the instant packing completes
   useEffect(() => {
     if (!worker) return
     const channel = supabase
@@ -121,7 +120,6 @@ export default function ShipPage() {
     if (!order || !worker) return
     setConfirming(true)
 
-    // Release basket if still attached
     if (order.basket_id) {
       await supabase.from('baskets').update({
         status: 'available',
@@ -143,7 +141,6 @@ export default function ShipPage() {
       note: `Shipped by ${worker.name}`,
     })
 
-    // Trigger Wix fulfillment if tracking exists
     if (order.tracking_number) {
       fetch('/api/integrations/wix/fulfill-order', {
         method: 'POST',
@@ -156,7 +153,6 @@ export default function ShipPage() {
     setDone(true)
     setConfirming(false)
 
-    // Load next order after 2s
     setTimeout(() => {
       setOrder(null)
       setDone(false)
@@ -182,133 +178,156 @@ export default function ShipPage() {
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800">
-        <div>
-          <p className="font-bold text-white">{worker?.name || 'Worker'}</p>
-          <p className="text-xs text-gray-500">Shipper</p>
+      <div className="flex items-center justify-between px-8 py-4 border-b border-gray-800 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-orange-900 rounded-lg flex items-center justify-center">
+            <Truck size={18} className="text-orange-400" />
+          </div>
+          <div>
+            <p className="font-bold text-white">{worker?.name || 'Worker'}</p>
+            <p className="text-xs text-gray-500">Shipper</p>
+          </div>
+          {order && !done && (
+            <>
+              <span className="text-gray-700 mx-2">|</span>
+              <p className="text-sm text-gray-400">Order <span className="text-white font-bold">#{order.order_number}</span></p>
+              {order.customer_name && <p className="text-sm text-gray-500">{order.customer_name}</p>}
+              {order.is_rush && <span className="text-xs bg-red-600 text-white font-bold px-2 py-0.5 rounded-full">RUSH</span>}
+            </>
+          )}
         </div>
-        <button onClick={handleLogout} className="p-2 text-gray-600 hover:text-gray-400">
-          <LogOut size={18} />
+        <button onClick={handleLogout} className="flex items-center gap-2 text-gray-500 hover:text-gray-300 text-sm transition-colors">
+          <LogOut size={16} /> Log out
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col px-4 py-6 max-w-lg mx-auto w-full">
+      <div className="flex-1 flex items-center justify-center px-8 py-8">
 
         {loading && (
-          <div className="flex-1 flex items-center justify-center text-gray-500">Loading...</div>
+          <p className="text-gray-500">Loading...</p>
         )}
 
         {!loading && !order && !done && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
-            <CheckCircle size={48} className="text-green-400" />
-            <p className="text-xl font-bold text-white">No orders to ship</p>
-            <p className="text-gray-500 text-sm">You'll be assigned automatically when packing is complete.</p>
+          <div className="text-center">
+            <div className="w-16 h-16 bg-green-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <CheckCircle size={32} className="text-green-400" />
+            </div>
+            <p className="text-2xl font-bold text-white mb-2">No orders to ship</p>
+            <p className="text-gray-500">You'll be assigned automatically when packing is complete.</p>
           </div>
         )}
 
         {done && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
-            <div className="w-20 h-20 bg-green-900 rounded-2xl flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-green-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Truck size={36} className="text-green-400" />
             </div>
-            <p className="text-2xl font-bold text-white">Shipped!</p>
+            <p className="text-3xl font-bold text-white mb-2">Shipped!</p>
             <p className="text-gray-400">Loading next order...</p>
           </div>
         )}
 
         {!loading && order && !done && (
-          <>
-            {/* Order header */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-              <div className="flex items-center justify-between mb-1">
-                <p className="font-bold text-white text-lg">Order #{order.order_number}</p>
-                {order.is_rush && <span className="text-xs bg-red-600 text-white font-bold px-2.5 py-1 rounded-full">RUSH</span>}
-              </div>
-              {order.customer_name && <p className="text-sm text-gray-400">{order.customer_name}</p>}
-              {order.notes && (
-                <div className="flex items-start gap-2 mt-2 bg-yellow-950 rounded-lg px-3 py-2">
-                  <AlertTriangle size={13} className="text-yellow-400 shrink-0 mt-0.5" />
-                  <p className="text-xs text-yellow-300">{order.notes}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Shipping address */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <MapPin size={15} className="text-gray-400" />
-                <p className="font-semibold text-sm text-white">Ship To</p>
-              </div>
-              {address.length > 0 ? (
-                <div className="space-y-0.5">
-                  {order.shipping_name && <p className="text-sm font-medium text-white">{order.shipping_name}</p>}
-                  {address.map((line, i) => (
-                    <p key={i} className="text-sm text-gray-400">{line}</p>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">No address on file</p>
-              )}
-            </div>
-
-            {/* Carrier + tracking */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Truck size={13} className="text-gray-400" />
-                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Carrier</p>
+          <div className="w-full max-w-4xl">
+            <div className="grid grid-cols-2 gap-6">
+              {/* Left column: order details */}
+              <div className="space-y-4">
+                {/* Order header */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-bold text-white text-lg">Order #{order.order_number}</p>
+                    {order.is_rush && <span className="text-xs bg-red-600 text-white font-bold px-2.5 py-1 rounded-full">RUSH</span>}
                   </div>
-                  <p className="text-sm font-semibold text-white">{order.carrier || <span className="text-gray-600">Not set</span>}</p>
+                  {order.customer_name && <p className="text-sm text-gray-400">{order.customer_name}</p>}
+                  {order.notes && (
+                    <div className="flex items-start gap-2 mt-3 bg-yellow-950 rounded-lg px-3 py-2">
+                      <AlertTriangle size={13} className="text-yellow-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-yellow-300">{order.notes}</p>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Hash size={13} className="text-gray-400" />
-                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Tracking</p>
+
+                {/* Shipping address */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <MapPin size={15} className="text-gray-400" />
+                    <p className="font-semibold text-sm text-white">Ship To</p>
                   </div>
-                  {order.tracking_number ? (
-                    <p className="text-sm font-mono font-semibold text-blue-400 break-all">{order.tracking_number}</p>
+                  {address.length > 0 ? (
+                    <div className="space-y-0.5">
+                      {order.shipping_name && <p className="text-sm font-medium text-white">{order.shipping_name}</p>}
+                      {address.map((line, i) => (
+                        <p key={i} className="text-sm text-gray-400">{line}</p>
+                      ))}
+                    </div>
                   ) : (
-                    <p className="text-sm text-yellow-500 font-medium">⚠ No label yet</p>
+                    <p className="text-sm text-gray-500">No address on file</p>
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Box count */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-orange-900 rounded-xl flex items-center justify-center shrink-0">
-                  <Box size={22} className="text-orange-400" />
+              {/* Right column: carrier + action */}
+              <div className="space-y-4">
+                {/* Carrier + tracking */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Truck size={13} className="text-gray-400" />
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Carrier</p>
+                      </div>
+                      <p className="text-base font-semibold text-white">{order.carrier || <span className="text-gray-600">Not set</span>}</p>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Hash size={13} className="text-gray-400" />
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Tracking</p>
+                      </div>
+                      {order.tracking_number ? (
+                        <p className="text-sm font-mono font-semibold text-blue-400 break-all">{order.tracking_number}</p>
+                      ) : (
+                        <p className="text-sm text-yellow-500 font-medium">⚠ No label yet</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-bold text-white text-2xl">{boxCount} {boxCount === 1 ? 'Box' : 'Boxes'}</p>
-                  <p className="text-xs text-gray-500">Confirm all boxes are labeled and ready</p>
+
+                {/* Box count */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-orange-900 rounded-xl flex items-center justify-center shrink-0">
+                      <Box size={24} className="text-orange-400" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-white text-3xl">{boxCount} {boxCount === 1 ? 'Box' : 'Boxes'}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Confirm all boxes are labeled and ready</p>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Confirm button */}
+                <button
+                  onClick={confirmShipped}
+                  disabled={confirming}
+                  className="w-full flex items-center justify-center gap-3 bg-green-700 hover:bg-green-600 active:bg-green-800 disabled:opacity-50 text-white py-5 rounded-xl font-bold text-xl transition-colors"
+                >
+                  {confirming ? (
+                    <span>Confirming...</span>
+                  ) : (
+                    <>
+                      <Truck size={22} />
+                      Confirm Shipped
+                      <ChevronRight size={18} />
+                    </>
+                  )}
+                </button>
+
+                {!order.tracking_number && (
+                  <p className="text-center text-xs text-yellow-500">No tracking number — make sure the label is printed before shipping.</p>
+                )}
               </div>
             </div>
-
-            {/* Confirm button */}
-            <button
-              onClick={confirmShipped}
-              disabled={confirming}
-              className="w-full flex items-center justify-center gap-3 bg-green-700 hover:bg-green-600 active:bg-green-800 disabled:opacity-50 text-white py-5 rounded-2xl font-bold text-xl transition-colors touch-manipulation"
-            >
-              {confirming ? (
-                <span>Confirming...</span>
-              ) : (
-                <>
-                  <Truck size={24} />
-                  Confirm Shipped
-                  <ChevronRight size={20} />
-                </>
-              )}
-            </button>
-
-            {!order.tracking_number && (
-              <p className="text-center text-xs text-yellow-500 mt-3">No tracking number — make sure the label is printed before shipping.</p>
-            )}
-          </>
+          </div>
         )}
       </div>
     </div>

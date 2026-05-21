@@ -456,7 +456,7 @@ export default function PickPage() {
             <p className="text-3xl font-bold text-white">Stop!</p>
             <p className="text-red-300 mt-3 text-lg">{hardError.message}</p>
           </div>
-          <button onClick={() => { setHardError(null); scanRef.current?.focus() }} className="bg-red-700 hover:bg-red-600 active:bg-red-800 text-white px-10 py-5 rounded-2xl font-bold text-xl touch-manipulation">
+          <button onClick={() => { setHardError(null); scanRef.current?.focus() }} className="bg-red-700 hover:bg-red-600 text-white px-10 py-4 rounded-xl font-bold text-xl">
             Dismiss
           </button>
         </div>
@@ -464,8 +464,8 @@ export default function PickPage() {
 
       {/* Short pick modal */}
       {shortPickItem && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-end justify-center">
-          <div className="bg-gray-900 border border-gray-700 rounded-t-2xl p-6 w-full max-w-lg">
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm">
             <p className="text-lg font-bold text-white mb-1">Short Pick</p>
             <p className="text-gray-400 text-sm mb-5">{shortPickItem.products.name}</p>
             <div className="flex items-center gap-3 mb-6">
@@ -480,242 +480,280 @@ export default function PickPage() {
               <span className="text-gray-400 text-lg">/ {shortPickItem.quantity_ordered}</span>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => { setShortPickItem(null); scanRef.current?.focus() }} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-4 rounded-xl font-semibold touch-manipulation">Cancel</button>
-              <button onClick={confirmShortPick} className="flex-1 bg-orange-600 hover:bg-orange-500 active:bg-orange-700 text-white py-4 rounded-xl font-semibold touch-manipulation">Confirm Short</button>
+              <button onClick={() => { setShortPickItem(null); scanRef.current?.focus() }} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl font-semibold">Cancel</button>
+              <button onClick={confirmShortPick} className="flex-1 bg-orange-600 hover:bg-orange-500 text-white py-3 rounded-xl font-semibold">Confirm Short</button>
             </div>
           </div>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800">
-        <div>
-          <p className="font-bold text-white">{worker?.name || 'Worker'}</p>
-          <p className="text-xs text-gray-500 capitalize">{worker?.role}</p>
+      <div className="flex items-center justify-between px-8 py-4 border-b border-gray-800 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-blue-900 rounded-lg flex items-center justify-center">
+            <ShoppingBasket size={18} className="text-blue-400" />
+          </div>
+          <div>
+            <p className="font-bold text-white">{worker?.name || 'Worker'}</p>
+            <p className="text-xs text-gray-500 capitalize">{worker?.role}</p>
+          </div>
+          {order && step === 'picking' && (
+            <>
+              <span className="text-gray-700 mx-2">|</span>
+              <p className="text-sm text-gray-400">Order <span className="text-white font-bold">#{order.order_number}</span></p>
+              {order.customer_name && <p className="text-sm text-gray-500">{order.customer_name}</p>}
+              {order.is_rush && <span className="text-xs bg-red-600 text-white font-bold px-2 py-0.5 rounded-full">RUSH</span>}
+            </>
+          )}
         </div>
-        <button onClick={handleLogout} className="p-2 text-gray-600 hover:text-gray-400"><LogOut size={18} /></button>
+        <div className="flex items-center gap-4">
+          {order && step === 'picking' && (
+            <div className="flex items-center gap-3">
+              <div className="w-40 h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
+              </div>
+              <span className="text-sm text-blue-400 font-bold tabular-nums">{pickedItems}/{totalItems}</span>
+            </div>
+          )}
+          <button onClick={handleLogout} className="flex items-center gap-2 text-gray-500 hover:text-gray-300 text-sm transition-colors">
+            <LogOut size={16} /> Log out
+          </button>
+        </div>
       </div>
 
       {/* Hidden scan input (barcode gun target) */}
       <input ref={scanRef} value={scanInput} onChange={e => setScanInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleScan(scanInput) }} className="opacity-0 absolute w-0 h-0" autoFocus autoComplete="off" />
 
-      {/* Visible scan bar */}
-      <div className="px-4 pt-3 max-w-lg mx-auto w-full">
-        <div className="flex gap-2">
-          <input value={scanInput} onChange={e => setScanInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleScan(scanInput) }} className="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-base text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Barcode..." autoComplete="off" />
-          <button onClick={() => setShowCamera(true)} className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-white px-4 py-3 rounded-xl touch-manipulation"><Camera size={20} /></button>
-          <button onClick={() => handleScan(scanInput)} className="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white px-5 py-3 rounded-xl text-sm font-semibold touch-manipulation">Scan</button>
-        </div>
-      </div>
-
       {showCamera && <CameraScanner onScan={(barcode) => { setShowCamera(false); handleScan(barcode) }} onClose={() => setShowCamera(false)} />}
 
-      <div className="flex-1 flex flex-col px-4 py-6 max-w-lg mx-auto w-full">
+      {/* Loading */}
+      {loading && <div className="flex-1 flex items-center justify-center text-gray-500">Loading your orders...</div>}
 
-        {/* Loading */}
-        {loading && <div className="flex-1 flex items-center justify-center text-gray-500">Loading your orders...</div>}
-
-        {/* No order */}
-        {!loading && !order && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
-            <CheckCircle size={48} className="text-green-400" />
-            <p className="text-xl font-bold text-white">No orders assigned</p>
-            <p className="text-gray-500 text-sm">You'll be notified as soon as a new order comes in.</p>
+      {/* No order */}
+      {!loading && !order && (
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
+          <div className="w-16 h-16 bg-green-900 rounded-2xl flex items-center justify-center">
+            <CheckCircle size={32} className="text-green-400" />
           </div>
-        )}
+          <p className="text-2xl font-bold text-white">No orders assigned</p>
+          <p className="text-gray-500">You'll be notified as soon as a new order comes in.</p>
+        </div>
+      )}
 
-        {/* Scan basket */}
-        {!loading && order && step === 'scan_basket' && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
-            <div className="w-20 h-20 bg-blue-900 rounded-2xl flex items-center justify-center">
-              <ShoppingBasket size={40} className="text-blue-400" />
+      {/* Scan basket */}
+      {!loading && order && step === 'scan_basket' && (
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
+          <div className="w-20 h-20 bg-blue-900 rounded-2xl flex items-center justify-center">
+            <ShoppingBasket size={40} className="text-blue-400" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-white mb-2">Scan Your Basket</p>
+            <p className="text-gray-400">Scan the basket barcode to begin picking</p>
+            <p className="text-blue-400 font-bold text-xl mt-2">#{order.order_number}</p>
+            {order.is_rush && <span className="text-xs bg-red-600 text-white font-bold px-3 py-1 rounded-full mt-2 inline-block">RUSH ORDER</span>}
+          </div>
+          {lastScan && (
+            <div className={`flex items-center gap-3 rounded-xl p-4 max-w-md w-full ${lastScan.result === 'warning' ? 'bg-orange-950 border border-orange-800' : lastScan.result === 'success' ? 'bg-green-950 border border-green-800' : 'bg-red-950 border border-red-800'}`}>
+              {lastScan.result === 'success' ? <CheckCircle size={18} className="text-green-400 shrink-0" /> : lastScan.result === 'warning' ? <AlertTriangle size={18} className="text-orange-400 shrink-0" /> : <XCircle size={18} className="text-red-400 shrink-0" />}
+              <p className={`text-sm font-medium ${lastScan.result === 'success' ? 'text-green-300' : lastScan.result === 'warning' ? 'text-orange-300' : 'text-red-300'}`}>{lastScan.message}</p>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-white mb-2">Scan Your Basket</p>
-              <p className="text-gray-400">Scan the basket barcode to begin picking</p>
-              <p className="text-blue-400 font-bold text-xl mt-2">#{order.order_number}</p>
-              {order.is_rush && <span className="text-xs bg-red-600 text-white font-bold px-3 py-1 rounded-full mt-2 inline-block">RUSH ORDER</span>}
-            </div>
-            {lastScan && (
-              <div className={`flex items-center gap-3 rounded-xl p-4 w-full ${lastScan.result === 'warning' ? 'bg-orange-950 border border-orange-800' : lastScan.result === 'success' ? 'bg-green-950 border border-green-800' : 'bg-red-950 border border-red-800'}`}>
-                {lastScan.result === 'success' ? <CheckCircle size={20} className="text-green-400 shrink-0" /> : lastScan.result === 'warning' ? <AlertTriangle size={20} className="text-orange-400 shrink-0" /> : <XCircle size={20} className="text-red-400 shrink-0" />}
-                <p className={`text-sm font-medium ${lastScan.result === 'success' ? 'text-green-300' : lastScan.result === 'warning' ? 'text-orange-300' : 'text-red-300'}`}>{lastScan.message}</p>
-              </div>
-            )}
+          )}
+          <div className="flex gap-3">
             <button onClick={() => scanRef.current?.focus()} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-semibold">
-              <Scan size={18} /> Tap to Scan
+              <Scan size={18} /> Click to Scan
+            </button>
+            <button onClick={() => setShowCamera(true)} className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-5 py-3 rounded-xl">
+              <Camera size={18} />
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Complete */}
-        {!loading && order && step === 'complete' && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
-            <div className="w-20 h-20 bg-green-900 rounded-2xl flex items-center justify-center">
-              <CheckCircle size={40} className="text-green-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white mb-2">Pick Complete!</p>
-              <p className="text-gray-400">Order #{order.order_number} is fully picked.</p>
-              <p className="text-gray-400 mt-1">Take the basket to the packing station.</p>
-            </div>
+      {/* Complete */}
+      {!loading && order && step === 'complete' && (
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
+          <div className="w-20 h-20 bg-green-900 rounded-2xl flex items-center justify-center">
+            <CheckCircle size={40} className="text-green-400" />
           </div>
-        )}
+          <div>
+            <p className="text-2xl font-bold text-white mb-2">Pick Complete!</p>
+            <p className="text-gray-400">Order #{order.order_number} is fully picked.</p>
+            <p className="text-gray-400 mt-1">Take the basket to the packing station.</p>
+          </div>
+        </div>
+      )}
 
-        {/* Picking */}
-        {!loading && order && step === 'picking' && (
-          <>
-            {/* Order progress bar */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="font-bold text-white text-sm">Order #{order.order_number}</p>
-                  {order.customer_name && <p className="text-xs text-gray-500">{order.customer_name}</p>}
+      {/* Picking — two-column desktop layout */}
+      {!loading && order && step === 'picking' && (
+        <div className="flex-1 flex overflow-hidden">
+
+          {/* Left panel: order info + queue */}
+          <div className="w-72 xl:w-80 border-r border-gray-800 flex flex-col bg-gray-900/20 shrink-0">
+            <div className="px-4 py-4 border-b border-gray-800">
+              {order.notes && (
+                <div className="flex items-start gap-1.5 mb-3 bg-yellow-950 rounded px-2.5 py-2">
+                  <AlertTriangle size={12} className="text-yellow-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-yellow-300">{order.notes}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xl font-bold text-blue-400 tabular-nums">{progressPct}%</p>
-                  <p className="text-xs text-gray-500">{pickedItems}/{totalItems} items</p>
-                </div>
+              )}
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-gray-500">{pickedItems}/{totalItems} items picked</span>
+                <span className="text-xs font-bold text-blue-400">{progressPct}%</span>
               </div>
-              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
               </div>
-              {order.is_rush && <p className="text-xs text-red-400 font-bold mt-2">⚡ RUSH ORDER</p>}
-              {order.notes && <p className="text-xs text-yellow-400 mt-2 bg-yellow-950 rounded px-2 py-1">{order.notes}</p>}
             </div>
 
-            {/* Last scan feedback */}
-            {lastScan && (
-              <div className={`flex items-center gap-3 rounded-xl p-3 mb-3 ${lastScan.result === 'warning' ? 'bg-orange-950 border border-orange-800' : lastScan.result === 'success' ? 'bg-green-950 border border-green-800' : 'bg-red-950 border border-red-800'}`}>
-                {lastScan.result === 'success' ? <CheckCircle size={18} className="text-green-400 shrink-0" /> : lastScan.result === 'warning' ? <AlertTriangle size={18} className="text-orange-400 shrink-0" /> : <XCircle size={18} className="text-red-400 shrink-0" />}
-                <p className={`text-sm font-medium ${lastScan.result === 'success' ? 'text-green-300' : lastScan.result === 'warning' ? 'text-orange-300' : 'text-red-300'}`}>{lastScan.message}</p>
-              </div>
-            )}
-
-            {/* NOW PICKING — big focused card */}
-            {currentItem && (() => {
-              const components = componentMap[currentItem.product_id]
-              const isBundle = components && components.length > 0
-              const progress = subPickProgress[currentItem.id] || {}
-              const isSkipped = skippedItemIds.has(currentItem.id)
-
-              return (
-                <div className={`rounded-2xl border-2 p-5 mb-3 ${isSkipped ? 'border-orange-700 bg-orange-950/30' : 'border-blue-600 bg-gray-900'}`}>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className={`text-xs font-bold tracking-widest uppercase ${isSkipped ? 'text-orange-400' : 'text-blue-400'}`}>
-                      {isSkipped ? 'SKIPPED — COME BACK' : 'NOW PICKING'}
-                    </span>
-                    {isBundle && <span className="text-xs bg-purple-900 text-purple-300 font-bold px-2 py-0.5 rounded-full">BUNDLE</span>}
-                  </div>
-
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="w-20 h-20 bg-gray-800 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
-                      {currentItem.products.image_url
-                        ? <img src={currentItem.products.image_url} alt="" className="w-full h-full object-cover" />
-                        : <Package size={28} className="text-gray-600" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xl font-bold text-white leading-tight">{currentItem.products.name}</p>
-                      <p className="text-sm text-gray-500 mt-0.5 font-mono">{currentItem.products.sku}</p>
-                      {currentItem.bin_location ? (
-                        <div className="flex items-center gap-1.5 mt-2">
-                          <MapPin size={14} className="text-yellow-400 shrink-0" />
-                          <span className="text-lg font-bold text-yellow-400 font-mono">{currentItem.bin_location}</span>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-gray-600 mt-2">No bin assigned</p>
-                      )}
-                    </div>
-                    {!isBundle && (
-                      <div className="text-right shrink-0">
-                        <p className="text-4xl font-bold tabular-nums text-white">{currentItem.quantity_picked}</p>
-                        <p className="text-gray-500 text-sm">/ {currentItem.quantity_ordered}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Bundle sub-products */}
-                  {isBundle && (
-                    <div className="space-y-2 mb-4">
-                      {components.map(c => {
-                        const picked = progress[c.sub_product_id] || 0
-                        const required = c.quantity * currentItem.quantity_ordered
-                        const done = picked >= required
-                        return (
-                          <div key={c.sub_product_id} className={`flex items-center justify-between px-3 py-2.5 rounded-xl ${done ? 'bg-green-950 border border-green-800' : 'bg-gray-800'}`}>
-                            <div className="flex items-center gap-2.5">
-                              {done ? <CheckCircle size={16} className="text-green-400 shrink-0" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-600 shrink-0" />}
-                              <div>
-                                <p className={`text-sm font-medium ${done ? 'text-green-400' : 'text-white'}`}>{c.name}</p>
-                                <p className="text-xs text-gray-500 font-mono">{c.sku}</p>
-                              </div>
-                            </div>
-                            <p className={`text-lg font-bold tabular-nums ${done ? 'text-green-400' : 'text-white'}`}>{picked}/{required}</p>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex gap-2 mt-1">
-                    {!isBundle && (
-                      <button
-                        onClick={() => { setShortPickItem(currentItem); setShortPickQty(currentItem.quantity_picked) }}
-                        className="flex-1 py-3 bg-gray-800 hover:bg-gray-700 text-orange-400 font-semibold rounded-xl text-sm touch-manipulation"
-                      >
-                        Short Pick
-                      </button>
-                    )}
-                    <button
-                      onClick={() => skipItem(currentItem)}
-                      className="flex-1 flex items-center justify-center gap-2 py-3 bg-gray-800 hover:bg-gray-700 text-gray-400 font-semibold rounded-xl text-sm touch-manipulation"
-                    >
-                      <SkipForward size={15} /> Skip
-                    </button>
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* UP NEXT — compact list */}
-            {upNextItems.length > 0 && (
-              <div className="space-y-2 mb-4">
-                <p className="text-xs text-gray-600 uppercase tracking-widest font-semibold px-1">Up Next</p>
+            <div className="px-3 py-3 flex-1 overflow-y-auto">
+              <p className="text-xs text-gray-600 uppercase tracking-widest font-semibold px-1 mb-2">
+                {upNextItems.length > 0 ? `Up Next (${upNextItems.length})` : 'Last Item'}
+              </p>
+              <div className="space-y-1.5">
                 {upNextItems.map(item => {
                   const isSkipped = skippedItemIds.has(item.id)
                   return (
-                    <div key={item.id} className={`flex items-center gap-3 rounded-xl px-4 py-3 ${isSkipped ? 'bg-orange-950/20 border border-orange-900' : 'bg-gray-900 border border-gray-800'}`}>
-                      <div className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                    <div key={item.id} className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 ${isSkipped ? 'bg-orange-950/30 border border-orange-900/50' : 'bg-gray-800/50'}`}>
+                      <div className="w-8 h-8 bg-gray-700 rounded flex items-center justify-center shrink-0 overflow-hidden">
                         {item.products.image_url
-                          ? <img src={item.products.image_url} alt="" className="w-full h-full object-cover rounded-lg" />
-                          : <Package size={14} className="text-gray-600" />}
+                          ? <img src={item.products.image_url} alt="" className="w-full h-full object-cover" />
+                          : <Package size={12} className="text-gray-500" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-200 truncate">{item.products.name}</p>
+                        <p className="text-xs font-medium text-gray-300 truncate">{item.products.name}</p>
                         {item.bin_location
-                          ? <p className="text-xs text-yellow-600 font-mono mt-0.5">{item.bin_location}</p>
-                          : <p className="text-xs text-gray-600 mt-0.5">No bin</p>}
+                          ? <p className="text-xs text-yellow-600 font-mono">{item.bin_location}</p>
+                          : <p className="text-xs text-gray-600">No bin</p>}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-bold text-gray-400 tabular-nums">{item.quantity_picked}/{item.quantity_ordered}</p>
-                        {isSkipped && <p className="text-xs text-orange-500">skipped</p>}
+                        <p className="text-xs font-bold text-gray-400 tabular-nums">{item.quantity_picked}/{item.quantity_ordered}</p>
+                        {isSkipped && <p className="text-xs text-orange-500">skip</p>}
                       </div>
                     </div>
                   )
                 })}
               </div>
-            )}
+            </div>
+          </div>
 
-            <button
-              onClick={() => scanRef.current?.focus()}
-              className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-white py-5 rounded-xl font-bold text-xl transition-colors touch-manipulation mb-4"
-            >
-              <Scan size={24} /> Tap to Scan Item
-            </button>
-          </>
-        )}
-      </div>
+          {/* Right panel: scan + current item */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Scan bar */}
+            <div className="px-6 py-3 border-b border-gray-800 bg-gray-900/30 shrink-0">
+              <div className="flex gap-2">
+                <input
+                  value={scanInput}
+                  onChange={e => setScanInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleScan(scanInput) }}
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Scan barcode or type and press Enter..."
+                  autoComplete="off"
+                />
+                <button onClick={() => setShowCamera(true)} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg border border-gray-700">
+                  <Camera size={18} />
+                </button>
+                <button onClick={() => handleScan(scanInput)} className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">
+                  Scan
+                </button>
+              </div>
+              {lastScan && (
+                <div className={`flex items-center gap-2 mt-2.5 rounded-lg px-3 py-2 ${lastScan.result === 'warning' ? 'bg-orange-950 border border-orange-800' : lastScan.result === 'success' ? 'bg-green-950 border border-green-800' : 'bg-red-950 border border-red-800'}`}>
+                  {lastScan.result === 'success' ? <CheckCircle size={14} className="text-green-400 shrink-0" /> : lastScan.result === 'warning' ? <AlertTriangle size={14} className="text-orange-400 shrink-0" /> : <XCircle size={14} className="text-red-400 shrink-0" />}
+                  <p className={`text-sm font-medium ${lastScan.result === 'success' ? 'text-green-300' : lastScan.result === 'warning' ? 'text-orange-300' : 'text-red-300'}`}>{lastScan.message}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Current item */}
+            <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col items-center">
+              {currentItem && (() => {
+                const components = componentMap[currentItem.product_id]
+                const isBundle = components && components.length > 0
+                const progress = subPickProgress[currentItem.id] || {}
+                const isSkipped = skippedItemIds.has(currentItem.id)
+
+                return (
+                  <div className={`w-full max-w-xl rounded-2xl border-2 p-6 ${isSkipped ? 'border-orange-700 bg-orange-950/30' : 'border-blue-600 bg-gray-900'}`}>
+                    <div className="flex items-center justify-between mb-5">
+                      <span className={`text-xs font-bold tracking-widest uppercase ${isSkipped ? 'text-orange-400' : 'text-blue-400'}`}>
+                        {isSkipped ? 'SKIPPED — COME BACK' : 'NOW PICKING'}
+                      </span>
+                      {isBundle && <span className="text-xs bg-purple-900 text-purple-300 font-bold px-2.5 py-1 rounded-full">BUNDLE</span>}
+                    </div>
+
+                    <div className="flex items-start gap-6 mb-5">
+                      <div className="w-32 h-32 bg-gray-800 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
+                        {currentItem.products.image_url
+                          ? <img src={currentItem.products.image_url} alt="" className="w-full h-full object-cover" />
+                          : <Package size={40} className="text-gray-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-2xl font-bold text-white leading-tight mb-1">{currentItem.products.name}</p>
+                        <p className="text-sm text-gray-500 font-mono mb-3">{currentItem.products.sku}</p>
+                        {currentItem.bin_location ? (
+                          <div className="flex items-center gap-2">
+                            <MapPin size={16} className="text-yellow-400 shrink-0" />
+                            <span className="text-2xl font-bold text-yellow-400 font-mono">{currentItem.bin_location}</span>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600">No bin assigned</p>
+                        )}
+                      </div>
+                      {!isBundle && (
+                        <div className="text-right shrink-0">
+                          <p className="text-6xl font-bold tabular-nums text-white leading-none">{currentItem.quantity_picked}</p>
+                          <p className="text-lg text-gray-500 mt-1">/ {currentItem.quantity_ordered}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bundle sub-products */}
+                    {isBundle && (
+                      <div className="space-y-2 mb-5">
+                        {components.map(c => {
+                          const picked = progress[c.sub_product_id] || 0
+                          const required = c.quantity * currentItem.quantity_ordered
+                          const done = picked >= required
+                          return (
+                            <div key={c.sub_product_id} className={`flex items-center justify-between px-4 py-3 rounded-xl ${done ? 'bg-green-950 border border-green-800' : 'bg-gray-800'}`}>
+                              <div className="flex items-center gap-3">
+                                {done ? <CheckCircle size={16} className="text-green-400 shrink-0" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-600 shrink-0" />}
+                                <div>
+                                  <p className={`text-sm font-medium ${done ? 'text-green-400' : 'text-white'}`}>{c.name}</p>
+                                  <p className="text-xs text-gray-500 font-mono">{c.sku}</p>
+                                </div>
+                              </div>
+                              <p className={`text-lg font-bold tabular-nums ${done ? 'text-green-400' : 'text-white'}`}>{picked}/{required}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex gap-3">
+                      {!isBundle && (
+                        <button
+                          onClick={() => { setShortPickItem(currentItem); setShortPickQty(currentItem.quantity_picked) }}
+                          className="flex-1 py-3 bg-gray-800 hover:bg-gray-700 text-orange-400 font-semibold rounded-xl text-sm"
+                        >
+                          Short Pick
+                        </button>
+                      )}
+                      <button
+                        onClick={() => skipItem(currentItem)}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-gray-800 hover:bg-gray-700 text-gray-400 font-semibold rounded-xl text-sm"
+                      >
+                        <SkipForward size={15} /> Skip
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
