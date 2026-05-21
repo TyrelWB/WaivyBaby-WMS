@@ -163,19 +163,46 @@ export default function ReceivePage() {
 
   const totalExpected = items.reduce((s, i) => s + (i.quantity_expected || 0), 0)
   const totalReceived = items.reduce((s, i) => s + (receiveProgress[i.id] ?? i.quantity_received), 0)
+  const progressPct = totalExpected ? Math.round((totalReceived / totalExpected) * 100) : 0
+  const allDone = totalExpected > 0 && totalReceived >= totalExpected
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-800">
-        <div>
-          <p className="font-bold text-white">{worker?.name || 'Worker'}</p>
-          <p className="text-xs text-gray-500">Receiver</p>
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-8 py-4 border-b border-gray-800 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-green-900 rounded-lg flex items-center justify-center">
+            <Truck size={18} className="text-green-400" />
+          </div>
+          <div>
+            <p className="font-bold text-white">{worker?.name || 'Worker'}</p>
+            <p className="text-xs text-gray-500">Receiver</p>
+          </div>
+          {activeRecord && step === 'receiving' && (
+            <>
+              <span className="text-gray-700 mx-2">|</span>
+              <p className="text-sm text-gray-400">Reference: <span className="text-white font-bold">{activeRecord.reference_number || '—'}</span></p>
+              {activeRecord.supplier_name && <p className="text-sm text-gray-500">· {activeRecord.supplier_name}</p>}
+            </>
+          )}
         </div>
-        <button onClick={handleLogout} className="p-2 text-gray-600 hover:text-gray-400">
-          <LogOut size={18} />
-        </button>
+        <div className="flex items-center gap-4">
+          {step === 'receiving' && totalExpected > 0 && (
+            <div className="flex items-center gap-3">
+              <div className="w-40 h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-full bg-green-500 rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
+              </div>
+              <span className="text-sm text-green-400 font-bold tabular-nums">{totalReceived}/{totalExpected}</span>
+            </div>
+          )}
+          <button onClick={handleLogout} className="flex items-center gap-2 text-gray-500 hover:text-gray-300 text-sm transition-colors">
+            <LogOut size={16} /> Log out
+          </button>
+        </div>
       </div>
 
+      {/* Hidden scan input (barcode gun target) */}
       <input
         ref={scanRef}
         value={scanInput}
@@ -185,31 +212,6 @@ export default function ReceivePage() {
         autoFocus
         autoComplete="off"
       />
-      <div className="px-4 pt-3 max-w-lg mx-auto w-full">
-        <div className="flex gap-2">
-          <input
-            value={scanInput}
-            onChange={e => setScanInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleScan(scanInput) }}
-            className="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-base text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="Barcode..."
-            autoComplete="off"
-          />
-          <button
-            onClick={() => setShowCamera(true)}
-            className="bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-white px-4 py-3 rounded-xl touch-manipulation"
-            title="Use camera"
-          >
-            <Camera size={20} />
-          </button>
-          <button
-            onClick={() => handleScan(scanInput)}
-            className="bg-green-600 hover:bg-green-500 active:bg-green-700 text-white px-5 py-3 rounded-xl text-sm font-semibold touch-manipulation"
-          >
-            Scan
-          </button>
-        </div>
-      </div>
 
       {showCamera && (
         <CameraScanner
@@ -218,106 +220,173 @@ export default function ReceivePage() {
         />
       )}
 
-      <div className="flex-1 flex flex-col px-4 py-6 max-w-lg mx-auto w-full">
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center text-gray-500">Loading...</div>
-        ) : step === 'select_record' ? (
-          <>
-            <p className="text-xl font-bold text-white mb-1">Select Shipment</p>
-            <p className="text-gray-500 text-sm mb-6">Choose the shipment you're receiving.</p>
-            {records.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
-                <Truck size={48} className="text-gray-600" />
-                <p className="text-gray-400">No open shipments. Ask your manager to create a receiving record first.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {records.map(record => (
-                  <button key={record.id} onClick={() => selectRecord(record)} className="w-full flex items-center gap-4 bg-gray-900 border border-gray-800 hover:border-green-700 active:bg-gray-800 rounded-xl p-5 transition-colors text-left touch-manipulation">
-                    <div className="w-12 h-12 bg-green-900 rounded-lg flex items-center justify-center shrink-0">
-                      <Truck size={20} className="text-green-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-white text-base">{record.reference_number || 'No reference'}</p>
-                      {record.supplier_name && <p className="text-sm text-gray-400 mt-0.5">{record.supplier_name}</p>}
-                    </div>
-                    <ChevronRight size={20} className="text-gray-600" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        ) : step === 'complete' ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
-            <div className="w-20 h-20 bg-green-900 rounded-2xl flex items-center justify-center">
-              <CheckCircle size={40} className="text-green-400" />
+      {/* Loading */}
+      {loading && <div className="flex-1 flex items-center justify-center text-gray-500">Loading...</div>}
+
+      {/* Select record — full-width centered grid */}
+      {!loading && step === 'select_record' && (
+        <div className="flex-1 flex flex-col px-8 py-8">
+          <p className="text-xl font-bold text-white mb-1">Select Shipment</p>
+          <p className="text-gray-500 text-sm mb-6">Choose the shipment you're receiving.</p>
+          {records.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
+              <Truck size={48} className="text-gray-600" />
+              <p className="text-gray-400">No open shipments. Ask your manager to create a receiving record first.</p>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-white mb-2">Receiving Complete!</p>
-              <p className="text-gray-400">All items have been checked in and added to inventory.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {records.map(record => (
+                <button
+                  key={record.id}
+                  onClick={() => selectRecord(record)}
+                  className="flex items-center gap-4 bg-gray-900 border border-gray-800 hover:border-green-700 active:bg-gray-800 rounded-xl p-5 transition-colors text-left"
+                >
+                  <div className="w-12 h-12 bg-green-900 rounded-lg flex items-center justify-center shrink-0">
+                    <Truck size={20} className="text-green-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-white text-base">{record.reference_number || 'No reference'}</p>
+                    {record.supplier_name && <p className="text-sm text-gray-400 mt-0.5">{record.supplier_name}</p>}
+                  </div>
+                  <ChevronRight size={20} className="text-gray-600 shrink-0" />
+                </button>
+              ))}
             </div>
-            <button onClick={() => { setStep('select_record'); setActiveRecord(null); setItems([]); setReceiveProgress({}) }} className="bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-xl font-semibold">
-              Receive Another
-            </button>
+          )}
+        </div>
+      )}
+
+      {/* Complete */}
+      {!loading && step === 'complete' && (
+        <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
+          <div className="w-20 h-20 bg-green-900 rounded-2xl flex items-center justify-center">
+            <CheckCircle size={40} className="text-green-400" />
           </div>
-        ) : (
-          <>
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-white">{activeRecord?.reference_number || 'Receiving'}</p>
-                  <p className="text-xs text-gray-400">{activeRecord?.supplier_name || 'No supplier'}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-green-400">{totalReceived}{totalExpected > 0 ? `/${totalExpected}` : ''}</p>
-                  <p className="text-xs text-gray-500">items received</p>
-                </div>
-              </div>
+          <div>
+            <p className="text-2xl font-bold text-white mb-2">Receiving Complete!</p>
+            <p className="text-gray-400">All items have been checked in and added to inventory.</p>
+          </div>
+          <button
+            onClick={() => { setStep('select_record'); setActiveRecord(null); setItems([]); setReceiveProgress({}) }}
+            className="bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-xl font-semibold"
+          >
+            Receive Another
+          </button>
+        </div>
+      )}
+
+      {/* Receiving — two-column desktop layout */}
+      {!loading && step === 'receiving' && (
+        <div className="flex-1 flex overflow-hidden">
+
+          {/* Left panel: shipment info + items list */}
+          <div className="w-72 xl:w-80 border-r border-gray-800 flex flex-col bg-gray-900/20 shrink-0">
+            <div className="px-4 py-4 border-b border-gray-800">
+              <p className="font-bold text-white">{activeRecord?.supplier_name || 'No supplier'}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{activeRecord?.reference_number || 'No reference'}</p>
               {totalExpected > 0 && (
-                <div className="mt-3 h-2 bg-gray-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${(totalReceived / totalExpected) * 100}%` }} />
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-500">{totalReceived}/{totalExpected} received</span>
+                    <span className="text-xs font-bold text-green-400">{progressPct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-green-500 rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
+                  </div>
                 </div>
               )}
             </div>
 
-            {lastScan && (
-              <div className={`flex items-center gap-3 rounded-xl p-4 mb-4 ${lastScan.result === 'success' ? 'bg-green-950 border border-green-800' : 'bg-red-950 border border-red-800'}`}>
-                {lastScan.result === 'success' ? <CheckCircle size={20} className="text-green-400 shrink-0" /> : <XCircle size={20} className="text-red-400 shrink-0" />}
-                <p className={`text-sm font-medium ${lastScan.result === 'success' ? 'text-green-300' : 'text-red-300'}`}>{lastScan.message}</p>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Items</p>
+            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5">
               {items.map(item => {
                 const received = receiveProgress[item.id] ?? item.quantity_received
                 const expected = item.quantity_expected || 0
                 const done = expected > 0 && received >= expected
                 return (
-                  <div key={item.id} className={`bg-gray-900 border rounded-xl p-4 flex items-center gap-4 ${done ? 'border-green-800 opacity-60' : received > 0 ? 'border-green-900' : 'border-gray-800'}`}>
-                    <div className="w-14 h-14 bg-gray-800 rounded-lg flex items-center justify-center shrink-0">
-                      <Package size={22} className="text-gray-600" />
+                  <div
+                    key={item.id}
+                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 ${done ? 'bg-green-950/30 border border-green-900/50' : received > 0 ? 'bg-gray-800' : 'bg-gray-800/50'}`}
+                  >
+                    <div className="w-8 h-8 bg-gray-700 rounded flex items-center justify-center shrink-0">
+                      <Package size={12} className="text-gray-500" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-white text-base leading-tight">{item.products.name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">SKU: {item.products.sku}</p>
+                      <p className="text-xs font-medium text-gray-300 truncate">{item.products.name}</p>
+                      <p className="text-xs text-gray-600 font-mono">{item.products.sku}</p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className={`text-2xl font-bold tabular-nums ${done ? 'text-green-400' : 'text-white'}`}>
+                      <p className={`text-xs font-bold tabular-nums ${done ? 'text-green-400' : 'text-white'}`}>
                         {received}{expected > 0 ? `/${expected}` : ''}
                       </p>
+                      {done && <p className="text-xs text-green-500">Done</p>}
                     </div>
                   </div>
                 )
               })}
             </div>
+          </div>
 
-            <button onClick={() => scanRef.current?.focus()} className="mt-6 w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-white py-5 rounded-xl font-bold text-xl transition-colors touch-manipulation mb-4">
-              <Scan size={24} /> Tap to Scan Item
-            </button>
-          </>
-        )}
-      </div>
+          {/* Right panel: scan + feedback */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Scan bar */}
+            <div className="px-6 py-4 border-b border-gray-800 bg-gray-900/30 shrink-0">
+              <div className="flex gap-2">
+                <input
+                  value={scanInput}
+                  onChange={e => setScanInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleScan(scanInput) }}
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Scan barcode or type and press Enter..."
+                  autoComplete="off"
+                />
+                <button
+                  onClick={() => setShowCamera(true)}
+                  className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2.5 rounded-lg border border-gray-700"
+                  title="Use camera"
+                >
+                  <Camera size={18} />
+                </button>
+                <button
+                  onClick={() => handleScan(scanInput)}
+                  className="bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold"
+                >
+                  Scan
+                </button>
+              </div>
+              {lastScan && (
+                <div className={`flex items-center gap-2 mt-2.5 rounded-lg px-3 py-2 ${lastScan.result === 'success' ? 'bg-green-950 border border-green-800' : 'bg-red-950 border border-red-800'}`}>
+                  {lastScan.result === 'success'
+                    ? <CheckCircle size={14} className="text-green-400 shrink-0" />
+                    : <XCircle size={14} className="text-red-400 shrink-0" />}
+                  <p className={`text-sm font-medium ${lastScan.result === 'success' ? 'text-green-300' : 'text-red-300'}`}>{lastScan.message}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Main area */}
+            <div className="flex-1 flex flex-col items-center justify-center px-8 gap-5 overflow-y-auto py-8">
+              <button
+                onClick={() => scanRef.current?.focus()}
+                className="w-full max-w-lg flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white py-4 rounded-xl font-bold text-lg transition-colors"
+              >
+                <Scan size={20} /> Click to Focus Scanner
+              </button>
+
+              {allDone && (
+                <button
+                  onClick={async () => {
+                    await supabase.from('receiving').update({ status: 'complete', received_date: new Date().toISOString() }).eq('id', activeRecord!.id)
+                    setStep('complete')
+                  }}
+                  className="w-full max-w-lg flex items-center justify-center gap-2 bg-green-700 hover:bg-green-600 text-white py-4 rounded-xl font-bold text-lg transition-colors"
+                >
+                  <CheckCircle size={22} /> Complete Receiving
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
