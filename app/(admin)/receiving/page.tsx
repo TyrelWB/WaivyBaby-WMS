@@ -29,7 +29,7 @@ type ReceivingItem = {
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
-  in_progress: 'bg-blue-100 text-blue-700',
+  in_progress: 'bg-cyan-100 text-cyan-600',
   complete: 'bg-green-100 text-green-700',
   cancelled: 'bg-gray-100 text-gray-500',
 }
@@ -172,17 +172,17 @@ export default function ReceivingPage() {
     <div className="p-6 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Receiving</h1>
+          <h1 className="text-lg font-bold text-gray-900">Receiving</h1>
           <p className="text-sm text-gray-500 mt-0.5">Inbound shipments and purchase orders</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
           <Plus size={16} /> New Shipment
         </button>
       </div>
 
       {/* Create form */}
       {showForm && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">New Receiving Record</h2>
             <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
@@ -190,23 +190,23 @@ export default function ReceivingPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Reference / PO Number</label>
-              <input value={form.reference_number} onChange={e => setForm({ ...form, reference_number: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="PO-12345" autoFocus />
+              <input value={form.reference_number} onChange={e => setForm({ ...form, reference_number: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="PO-12345" autoFocus />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Supplier / Vendor</label>
-              <input value={form.supplier_name} onChange={e => setForm({ ...form, supplier_name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Acme Corp" />
+              <input value={form.supplier_name} onChange={e => setForm({ ...form, supplier_name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="Acme Corp" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Expected Date</label>
-              <input type="date" value={form.expected_date} onChange={e => setForm({ ...form, expected_date: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="date" value={form.expected_date} onChange={e => setForm({ ...form, expected_date: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes</label>
-              <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Optional notes" />
+              <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="Optional notes" />
             </div>
             <div className="col-span-2 flex gap-3 justify-end pt-2">
               <button onClick={() => { setShowForm(false); setForm(emptyForm) }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
-              <button onClick={createRecord} disabled={saving} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              <button onClick={createRecord} disabled={saving} className="bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
                 {saving ? 'Creating...' : 'Create Record'}
               </button>
             </div>
@@ -226,7 +226,7 @@ export default function ReceivingPage() {
       {loading ? (
         <div className="text-sm text-gray-400 p-6">Loading...</div>
       ) : records.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-12 text-center">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
           <Truck size={36} className="text-gray-300 mx-auto mb-3" />
           <p className="font-semibold text-gray-900">No receiving records</p>
           <p className="text-sm text-gray-400 mt-1">Create a new shipment record when goods arrive.</p>
@@ -239,10 +239,10 @@ export default function ReceivingPage() {
             const isExpanded = expanded[record.id]
 
             return (
-              <div key={record.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div key={record.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="flex items-center gap-4 px-6 py-4">
-                  <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
-                    <Truck size={18} className="text-blue-500" />
+                  <div className="w-10 h-10 bg-cyan-50 rounded-lg flex items-center justify-center shrink-0">
+                    <Truck size={18} className="text-cyan-500" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
@@ -267,7 +267,7 @@ export default function ReceivingPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {record.status === 'pending' && (
-                      <button onClick={() => { updateStatus(record.id, 'in_progress'); setExpanded(p => ({ ...p, [record.id]: true })) }} className="text-xs text-blue-600 border border-blue-200 hover:bg-blue-50 rounded-lg px-2.5 py-1.5 transition-colors">
+                      <button onClick={() => { updateStatus(record.id, 'in_progress'); setExpanded(p => ({ ...p, [record.id]: true })) }} className="text-xs text-cyan-500 border border-cyan-200 hover:bg-cyan-50 rounded-lg px-2.5 py-1.5 transition-colors">
                         Start
                       </button>
                     )}
@@ -321,7 +321,7 @@ export default function ReceivingPage() {
                               <input
                                 value={itemForm.sku}
                                 onChange={e => { setItemForm(f => ({ ...f, sku: e.target.value })); lookupSku(e.target.value) }}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
                                 placeholder="SKU"
                                 autoFocus
                               />
@@ -331,15 +331,15 @@ export default function ReceivingPage() {
                               type="number"
                               value={itemForm.quantity_expected}
                               onChange={e => setItemForm(f => ({ ...f, quantity_expected: e.target.value }))}
-                              className="w-24 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-24 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
                               placeholder="Qty"
                               min="1"
                             />
-                            <button onClick={() => addItemToRecord(record.id)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Add</button>
+                            <button onClick={() => addItemToRecord(record.id)} className="bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Add</button>
                             <button onClick={() => { setAddingItemTo(null); setItemForm({ sku: '', quantity_expected: '' }); setSkuMatch(null) }} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                           </div>
                         ) : (
-                          <button onClick={() => { setAddingItemTo(record.id); setExpanded(p => ({ ...p, [record.id]: true })) }} className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                          <button onClick={() => { setAddingItemTo(record.id); setExpanded(p => ({ ...p, [record.id]: true })) }} className="flex items-center gap-1.5 text-xs text-cyan-500 hover:text-cyan-600 font-medium">
                             <Plus size={12} /> Add Item
                           </button>
                         )}

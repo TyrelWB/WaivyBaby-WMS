@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CheckCircle, XCircle, Loader2, Eye, EyeOff, ExternalLink, RefreshCw, Truck, ShoppingCart, Package, UploadCloud, Copy, Check } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Eye, EyeOff, ExternalLink, RefreshCw, Truck, ShoppingCart, Package, UploadCloud, Copy, Check, AlertCircle, Search, CreditCard } from 'lucide-react'
 import { toast } from 'sonner'
 
 type IntegrationStatus = {
@@ -46,6 +46,17 @@ export default function IntegrationsPage() {
   const [wixSyncingInv, setWixSyncingInv] = useState(false)
   const [wixSyncingOrders, setWixSyncingOrders] = useState(false)
   const [webhookCopied, setWebhookCopied] = useState(false)
+  const [mapResult, setMapResult] = useState<{ mapped: number; skipped: number; total: number; unmatchedWix: { name: string; sku: string }[]; wmsUnmapped: number } | null>(null)
+  const [diagLoading, setDiagLoading] = useState(false)
+  const [diagData, setDiagData] = useState<{ wix: { name: string; sku: string }[]; wms: { name: string; sku: string; mapped: boolean }[]; stats: { wixTotal: number; wmsTotal: number; wmsMapped: number; wmsUnmapped: number } } | null>(null)
+  const [recalculating, setRecalculating] = useState(false)
+  const [recalcResults, setRecalcResults] = useState<{ name: string; qty: number; components: { name: string; needed: number; available: number; canMake: number }[] }[] | null>(null)
+  const [syncLogs, setSyncLogs] = useState<{ id: string; status: string; payload: any; response: any; error: string | null; created_at: string }[] | null>(null)
+  const [logsLoading, setLogsLoading] = useState(false)
+
+  // Stripe
+  const [stripeSyncing, setStripeSyncing] = useState(false)
+  const [stripeSyncResult, setStripeSyncResult] = useState<{ created: number; updated: number; errors: string[] } | null>(null)
 
   async function loadStatus() {
     const res = await fetch('/api/integrations')
@@ -117,14 +128,54 @@ export default function IntegrationsPage() {
 
   async function mapProducts() {
     setWixMapping(true)
+    setMapResult(null)
     const res = await fetch('/api/integrations/wix/map-products', { method: 'POST' })
     const d = await res.json()
     if (d.error) {
       toast.error(d.error)
     } else {
-      toast.success(`Mapped ${d.mapped} products (${d.skipped} skipped, ${d.total} in Wix)`)
+      setMapResult(d)
+      if (d.mapped > 0) {
+        toast.success(`Mapped ${d.mapped} of ${d.total} Wix products`)
+      } else {
+        toast.error(`No products matched — ${d.skipped} unmatched. Check SKUs or names below.`)
+      }
     }
     setWixMapping(false)
+  }
+
+  async function loadDiagnostic() {
+    setDiagLoading(true)
+    const res = await fetch('/api/integrations/wix/diagnose')
+    const d = await res.json()
+    if (d.error) {
+      toast.error(d.error)
+    } else {
+      setDiagData(d)
+    }
+    setDiagLoading(false)
+  }
+
+  async function loadSyncLogs() {
+    setLogsLoading(true)
+    const res = await fetch('/api/integrations/wix/sync-logs')
+    const d = await res.json()
+    if (!d.error) setSyncLogs(d)
+    setLogsLoading(false)
+  }
+
+  async function recalculateBundles() {
+    setRecalculating(true)
+    setRecalcResults(null)
+    const res = await fetch('/api/admin/recalculate-bundles', { method: 'POST' })
+    const d = await res.json()
+    if (d.error) {
+      toast.error(d.error)
+    } else {
+      setRecalcResults(d.results)
+      toast.success(`Updated ${d.updated} bundle products`)
+    }
+    setRecalculating(false)
   }
 
   async function syncInventory() {
@@ -180,6 +231,20 @@ export default function IntegrationsPage() {
     setWixTesting(false)
   }
 
+  async function syncToStripe() {
+    setStripeSyncing(true)
+    setStripeSyncResult(null)
+    const res = await fetch('/api/integrations/stripe/sync', { method: 'POST' })
+    const d = await res.json()
+    if (d.error) {
+      toast.error(d.error)
+    } else {
+      setStripeSyncResult(d)
+      toast.success(`Stripe: ${d.created} products created, ${d.updated} updated`)
+    }
+    setStripeSyncing(false)
+  }
+
   async function syncWix() {
     setWixSyncing(true)
     const res = await fetch('/api/integrations/wix/sync', { method: 'POST' })
@@ -198,14 +263,14 @@ export default function IntegrationsPage() {
   if (status.needsMigration) {
     return (
       <div className="p-6 max-w-2xl">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Integrations</h1>
+        <h1 className="text-lg font-bold text-gray-900 mb-2">Integrations</h1>
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
           <p className="font-semibold text-yellow-800 mb-2">Database setup required</p>
           <p className="text-sm text-yellow-700 mb-4">Run the migration in your Supabase SQL editor before using integrations.</p>
           <pre className="bg-yellow-100 rounded-lg p-4 text-xs text-yellow-900 overflow-x-auto whitespace-pre-wrap">
             {`-- Copy from: supabase/migrations/integrations.sql`}
           </pre>
-          <a href="https://supabase.com/dashboard" target="_blank" rel="noopener" className="mt-4 inline-flex items-center gap-1.5 text-sm text-blue-600 hover:underline font-medium">
+          <a href="https://supabase.com/dashboard" target="_blank" rel="noopener" className="mt-4 inline-flex items-center gap-1.5 text-sm text-cyan-500 hover:underline font-medium">
             Open Supabase Dashboard <ExternalLink size={13} />
           </a>
         </div>
@@ -219,12 +284,12 @@ export default function IntegrationsPage() {
   return (
     <div className="p-6 max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Integrations</h1>
+        <h1 className="text-lg font-bold text-gray-900">Integrations</h1>
         <p className="text-sm text-gray-500 mt-0.5">Connect third-party services to sync orders and shipments</p>
       </div>
 
       {/* ShipStation */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#4A90D9] rounded-lg flex items-center justify-center">
@@ -243,7 +308,7 @@ export default function IntegrationsPage() {
             ) : (
               <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">Not configured</span>
             )}
-            <a href="https://ship13.shipstation.com/settings/api" target="_blank" rel="noopener" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+            <a href="https://ship13.shipstation.com/settings/api" target="_blank" rel="noopener" className="text-xs text-cyan-500 hover:underline flex items-center gap-1">
               Get API keys <ExternalLink size={11} />
             </a>
           </div>
@@ -261,7 +326,7 @@ export default function IntegrationsPage() {
                   value={ssForm.api_key}
                   onChange={e => setSsForm(f => ({ ...f, api_key: e.target.value }))}
                   placeholder={ssConfigured ? 'Leave blank to keep current' : 'Enter API key'}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                   autoComplete="off"
                 />
                 <button onClick={() => setSsShowKey(v => !v)} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
@@ -279,7 +344,7 @@ export default function IntegrationsPage() {
                   value={ssForm.api_secret}
                   onChange={e => setSsForm(f => ({ ...f, api_secret: e.target.value }))}
                   placeholder={ssConfigured ? 'Leave blank to keep current' : 'Enter API secret'}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                   autoComplete="off"
                 />
                 <button onClick={() => setSsShowSecret(v => !v)} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
@@ -295,7 +360,7 @@ export default function IntegrationsPage() {
               <select
                 value={ssForm.default_carrier}
                 onChange={e => setSsForm(f => ({ ...f, default_carrier: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
               >
                 {CARRIERS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
@@ -309,13 +374,13 @@ export default function IntegrationsPage() {
                 value={ssForm.default_service}
                 onChange={e => setSsForm(f => ({ ...f, default_service: e.target.value }))}
                 placeholder={ssConfigured ? 'e.g. priority_mail' : 'e.g. ups_ground'}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
               />
             </div>
           </div>
 
           {ssTestResult && (
-            <div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 ${ssTestResult.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+            <div className={`flex items-center gap-2 text-sm rounded-xl px-3 py-2 ${ssTestResult.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
               {ssTestResult.ok ? <CheckCircle size={14} /> : <XCircle size={14} />}
               {ssTestResult.ok ? 'Connected to ShipStation successfully' : ssTestResult.error}
             </div>
@@ -325,7 +390,7 @@ export default function IntegrationsPage() {
             <button
               onClick={saveShipStation}
               disabled={ssSaving}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
             >
               {ssSaving ? <Loader2 size={14} className="animate-spin" /> : null}
               {ssSaving ? 'Saving...' : 'Save Credentials'}
@@ -333,7 +398,7 @@ export default function IntegrationsPage() {
             <button
               onClick={testShipStation}
               disabled={ssTesting || !ssConfigured}
-              className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
             >
               {ssTesting ? <Loader2 size={14} className="animate-spin" /> : null}
               {ssTesting ? 'Testing...' : 'Test Connection'}
@@ -349,7 +414,7 @@ export default function IntegrationsPage() {
       </div>
 
       {/* Wix */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center">
@@ -368,7 +433,7 @@ export default function IntegrationsPage() {
             ) : (
               <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">Not configured</span>
             )}
-            <a href="https://manage.wix.com/account/api-keys" target="_blank" rel="noopener" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+            <a href="https://manage.wix.com/account/api-keys" target="_blank" rel="noopener" className="text-xs text-cyan-500 hover:underline flex items-center gap-1">
               Get API keys <ExternalLink size={11} />
             </a>
           </div>
@@ -386,7 +451,7 @@ export default function IntegrationsPage() {
                   value={wixForm.api_key}
                   onChange={e => setWixForm(f => ({ ...f, api_key: e.target.value }))}
                   placeholder={wixConfigured ? 'Leave blank to keep current' : 'Enter API key'}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                   autoComplete="off"
                 />
                 <button onClick={() => setWixShowKey(v => !v)} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
@@ -402,7 +467,7 @@ export default function IntegrationsPage() {
                 value={wixForm.site_id}
                 onChange={e => setWixForm(f => ({ ...f, site_id: e.target.value }))}
                 placeholder={wixConfigured ? 'Leave blank to keep current' : 'e.g. a1b2c3d4-...'}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
                 autoComplete="off"
               />
             </div>
@@ -416,14 +481,14 @@ export default function IntegrationsPage() {
               value={wixForm.webhook_secret}
               onChange={e => setWixForm(f => ({ ...f, webhook_secret: e.target.value }))}
               placeholder={wixConfigured ? 'Leave blank to keep current' : 'Create a secret password for webhook security'}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
               autoComplete="off"
             />
             <p className="text-xs text-gray-400 mt-1">Used to authenticate incoming webhooks from Wix. Choose any string.</p>
           </div>
 
           {wixTestResult && (
-            <div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 ${wixTestResult.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+            <div className={`flex items-center gap-2 text-sm rounded-xl px-3 py-2 ${wixTestResult.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
               {wixTestResult.ok ? <CheckCircle size={14} /> : <XCircle size={14} />}
               {wixTestResult.ok ? 'Connected to Wix successfully' : wixTestResult.error}
             </div>
@@ -433,7 +498,7 @@ export default function IntegrationsPage() {
             <button
               onClick={saveWix}
               disabled={wixSaving}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
             >
               {wixSaving ? <Loader2 size={14} className="animate-spin" /> : null}
               {wixSaving ? 'Saving...' : 'Save Credentials'}
@@ -441,7 +506,7 @@ export default function IntegrationsPage() {
             <button
               onClick={testWix}
               disabled={wixTesting || !wixConfigured}
-              className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
             >
               {wixTesting ? <Loader2 size={14} className="animate-spin" /> : null}
               {wixTesting ? 'Testing...' : 'Test Connection'}
@@ -462,15 +527,23 @@ export default function IntegrationsPage() {
                   <button
                     onClick={mapProducts}
                     disabled={wixMapping}
-                    className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
                   >
                     {wixMapping ? <Loader2 size={14} className="animate-spin" /> : <Package size={14} />}
                     {wixMapping ? 'Mapping...' : 'Map Products'}
                   </button>
                   <button
+                    onClick={recalculateBundles}
+                    disabled={recalculating}
+                    className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    {recalculating ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    {recalculating ? 'Recalculating...' : 'Recalculate Bundle Stock'}
+                  </button>
+                  <button
                     onClick={syncInventory}
                     disabled={wixSyncingInv}
-                    className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
                   >
                     {wixSyncingInv ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
                     {wixSyncingInv ? 'Syncing...' : 'Push Inventory to Wix'}
@@ -478,20 +551,160 @@ export default function IntegrationsPage() {
                   <button
                     onClick={syncOrders}
                     disabled={wixSyncingOrders}
-                    className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
                   >
                     {wixSyncingOrders ? <Loader2 size={14} className="animate-spin" /> : <ShoppingCart size={14} />}
                     {wixSyncingOrders ? 'Importing...' : 'Sync Orders from Wix'}
                   </button>
                 </div>
                 <p className="text-xs text-gray-400">Run <span className="font-medium text-gray-600">Map Products</span> first to link WMS SKUs to Wix products. Then use <span className="font-medium text-gray-600">Push Inventory</span> to set Wix stock levels from WMS.</p>
+
+                {/* Bundle recalc results */}
+                {recalcResults && (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-2">
+                    <p className="text-xs font-semibold text-gray-600">Bundle Stock Results</p>
+                    {recalcResults.map((r, i) => (
+                      <div key={i} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-gray-800">{r.name}</span>
+                          <span className={`text-sm font-bold ${r.qty > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{r.qty} in stock</span>
+                        </div>
+                        {r.qty === 0 && r.components.length > 0 && (
+                          <div className="pl-3 space-y-0.5">
+                            {r.components.filter(c => c.canMake === 0).map((c, j) => (
+                              <p key={j} className="text-xs text-red-500">
+                                ✗ {c.name} — needs {c.needed}, has {c.available}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Mapping results */}
+                {mapResult && (
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+                    <div className="flex items-center gap-4">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-emerald-600">{mapResult.mapped}</p>
+                        <p className="text-xs text-gray-500">Matched</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-orange-500">{mapResult.skipped}</p>
+                        <p className="text-xs text-gray-500">Unmatched in Wix</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-gray-400">{mapResult.wmsUnmapped}</p>
+                        <p className="text-xs text-gray-500">WMS not linked</p>
+                      </div>
+                    </div>
+                    {mapResult.unmatchedWix.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-2">Wix products that didn't match — SKU or name must match a WMS product:</p>
+                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                          {mapResult.unmatchedWix.map((p, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs bg-white rounded-lg px-3 py-1.5 border border-gray-100">
+                              <span className="text-gray-800 font-medium">{p.name}</span>
+                              <span className="text-gray-400 font-mono">{p.sku || '(no sku)'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Diagnostic panel */}
+                <div>
+                  <button
+                    onClick={loadDiagnostic}
+                    disabled={diagLoading}
+                    className="flex items-center gap-2 text-xs text-cyan-500 hover:text-cyan-600 font-medium"
+                  >
+                    {diagLoading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                    {diagLoading ? 'Loading...' : 'Show Wix vs WMS comparison'}
+                  </button>
+
+                  {diagData && (
+                    <div className="mt-3 space-y-3">
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        <span>Wix: <strong className="text-gray-800">{diagData.stats.wixTotal}</strong> products</span>
+                        <span>WMS: <strong className="text-gray-800">{diagData.stats.wmsTotal}</strong> products</span>
+                        <span>Mapped: <strong className="text-emerald-600">{diagData.stats.wmsMapped}</strong></span>
+                        <span>Unmapped: <strong className="text-orange-500">{diagData.stats.wmsUnmapped}</strong></span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 mb-1.5">Wix Products (SKU)</p>
+                          <div className="space-y-1 max-h-48 overflow-y-auto border border-gray-100 rounded-xl p-2 bg-gray-50">
+                            {diagData.wix.map((p, i) => (
+                              <div key={i} className="text-xs flex justify-between gap-2">
+                                <span className="text-gray-700 truncate">{p.name}</span>
+                                <span className="text-gray-400 font-mono shrink-0">{p.sku || '—'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 mb-1.5">WMS Products (SKU)</p>
+                          <div className="space-y-1 max-h-48 overflow-y-auto border border-gray-100 rounded-xl p-2 bg-gray-50">
+                            {diagData.wms.map((p, i) => (
+                              <div key={i} className="text-xs flex justify-between gap-2">
+                                <span className={`truncate ${p.mapped ? 'text-emerald-600' : 'text-gray-700'}`}>{p.name}</span>
+                                <span className="text-gray-400 font-mono shrink-0">{p.sku || '—'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-400">Green = mapped. Match SKUs or names between both columns to fix unmatched products.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Recent Sync Errors</p>
+                <button
+                  onClick={loadSyncLogs}
+                  disabled={logsLoading}
+                  className="flex items-center gap-2 text-xs text-cyan-500 hover:text-cyan-600 font-medium"
+                >
+                  {logsLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  {logsLoading ? 'Loading...' : 'Show recent inventory sync logs'}
+                </button>
+                {syncLogs && (
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {syncLogs.filter(l => l.status === 'failed').length === 0 && (
+                      <p className="text-xs text-emerald-600">No recent errors</p>
+                    )}
+                    {syncLogs.filter(l => l.status === 'failed').map(log => (
+                      <div key={log.id} className="rounded-xl border border-red-100 bg-red-50 p-3 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-red-700">{log.payload?.sku}</span>
+                          <span className="text-xs text-gray-400">{new Date(log.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                        </div>
+                        <p className="text-xs text-red-600">{log.error}</p>
+                        <div className="text-xs text-gray-500 font-mono space-y-0.5">
+                          <p>delta: {log.payload?.sentDelta} | qty: {log.payload?.availableQty}</p>
+                          <p>inventoryItemId: {log.payload?.inventoryItemId}</p>
+                          <p>variantId: {log.payload?.variantId}</p>
+                          <p>wixProductId: {log.payload?.wixProductId}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 border-t border-gray-100 space-y-2">
                 <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Webhook URL</p>
-                <p className="text-xs text-gray-500">Register this URL in your <a href="https://dev.wix.com/dc3/my-apps" target="_blank" rel="noopener" className="text-blue-600 hover:underline">Wix Developer Center</a> to receive new orders automatically.</p>
+                <p className="text-xs text-gray-500">Register this URL in your <a href="https://dev.wix.com/dc3/my-apps" target="_blank" rel="noopener" className="text-cyan-500 hover:underline">Wix Developer Center</a> to receive new orders automatically.</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 truncate">
+                  <code className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 truncate">
                     {typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'}/api/webhooks/wix?secret={(wixForm.webhook_secret || '(your-secret)')}
                   </code>
                   <button
@@ -505,6 +718,74 @@ export default function IntegrationsPage() {
               </div>
             </>
           )}
+        </div>
+      </div>
+
+      {/* Stripe */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#635BFF] rounded-lg flex items-center justify-center">
+              <CreditCard size={18} className="text-white" />
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">Stripe</p>
+              <p className="text-xs text-gray-400">Sync WMS inventory to Stripe — auto-deducts when customers buy</p>
+            </div>
+          </div>
+          <a href="https://dashboard.stripe.com" target="_blank" rel="noopener" className="text-xs text-cyan-500 hover:underline flex items-center gap-1">
+            Stripe Dashboard <ExternalLink size={11} />
+          </a>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div className="rounded-xl bg-purple-50 border border-purple-100 p-4 space-y-1">
+            <p className="text-xs font-semibold text-purple-800">How it works</p>
+            <p className="text-xs text-purple-700">1. Click <strong>Sync Products to Stripe</strong> — this creates your WMS products in Stripe with current stock levels.</p>
+            <p className="text-xs text-purple-700">2. When a customer buys on Stripe, the webhook automatically deducts stock in WMS.</p>
+            <p className="text-xs text-purple-700">3. Stripe and Wix are <strong>separate</strong> — updating one does not affect the other.</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={syncToStripe}
+              disabled={stripeSyncing}
+              className="flex items-center gap-2 bg-[#635BFF] hover:bg-[#4f46e5] disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+            >
+              {stripeSyncing ? <Loader2 size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+              {stripeSyncing ? 'Syncing...' : 'Sync Products to Stripe'}
+            </button>
+          </div>
+
+          {stripeSyncResult && (
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-1">
+              <div className="flex items-center gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-emerald-600">{stripeSyncResult.created}</p>
+                  <p className="text-xs text-gray-500">Created</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-blue-600">{stripeSyncResult.updated}</p>
+                  <p className="text-xs text-gray-500">Updated</p>
+                </div>
+              </div>
+              {stripeSyncResult.errors.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {stripeSyncResult.errors.map((e, i) => (
+                    <p key={i} className="text-xs text-red-500">{e}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-gray-100 space-y-2">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Webhook URL</p>
+            <p className="text-xs text-gray-500">This is already set up in your Stripe webhook destination.</p>
+            <code className="block bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700">
+              https://waivy-baby-wms.vercel.app/api/webhooks/stripe
+            </code>
+          </div>
         </div>
       </div>
     </div>

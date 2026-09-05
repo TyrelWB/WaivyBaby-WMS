@@ -145,15 +145,32 @@ export async function POST(req: Request) {
   // Add order items
   const lineItems: any[] = fullOrder.lineItems || []
   for (const item of lineItems) {
+    const wixProductId = item.catalogReference?.catalogItemId || null
     const sku = item.catalogReference?.externalReference || item.physicalProperties?.sku || ''
-    if (!sku) continue
 
-    const { data: product } = await admin
-      .from('products')
-      .select('id')
-      .eq('org_id', orgId)
-      .ilike('sku', sku)
-      .maybeSingle()
+    let product: { id: string } | null = null
+
+    // 1. Try match by wix_product_id (most reliable — set during Map Products)
+    if (wixProductId) {
+      const { data } = await admin
+        .from('products')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('wix_product_id', wixProductId)
+        .maybeSingle()
+      product = data
+    }
+
+    // 2. Fallback: match by SKU
+    if (!product && sku) {
+      const { data } = await admin
+        .from('products')
+        .select('id')
+        .eq('org_id', orgId)
+        .ilike('sku', sku)
+        .maybeSingle()
+      product = data
+    }
 
     if (!product) continue
 

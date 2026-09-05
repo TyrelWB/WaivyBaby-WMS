@@ -1,62 +1,129 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 import {
-  LayoutDashboard, Package, ShoppingCart, Users, Warehouse,
-  BarChart2, Settings, LogOut, ChevronLeft, ChevronRight,
-  AlertTriangle, Truck, RotateCcw, ShoppingBasket, Building2, Link2, FileText, Search, Tag
+  LayoutDashboard, Package, ShoppingCart, Users,
+  BarChart2, Settings, LogOut, Truck,
+  RotateCcw, ShoppingBasket, Link2, FileText,
+  MapPin, Warehouse, ClipboardList, AlertTriangle, Zap, CalendarCheck, Sparkles
 } from 'lucide-react'
 
 const groups = [
-  {
-    label: 'Overview',
-    links: [
-      { label: 'Command Center', href: '/dashboard', icon: LayoutDashboard },
-      { label: 'Analytics', href: '/analytics', icon: BarChart2 },
-    ]
-  },
-  {
-    label: 'Operations',
-    links: [
-      { label: 'Orders', href: '/orders', icon: ShoppingCart },
-      { label: 'Order Lookup', href: '/tracking', icon: Search },
-      { label: 'Receiving', href: '/receiving', icon: Truck },
-      { label: 'Returns', href: '/returns', icon: RotateCcw },
-      { label: 'Exceptions', href: '/exceptions', icon: AlertTriangle },
-      { label: 'Reports', href: '/reports', icon: FileText },
-    ]
-  },
-  {
-    label: 'Warehouse',
-    links: [
-      { label: 'Inventory', href: '/inventory', icon: Package },
-      { label: 'Print Labels', href: '/print/labels', icon: Tag },
-      { label: 'Baskets', href: '/baskets', icon: ShoppingBasket },
-    ]
-  },
-  {
-    label: 'Team',
-    links: [
-      { label: 'Workers', href: '/workers', icon: Users },
-      { label: 'Suppliers', href: '/suppliers', icon: Building2 },
-    ]
-  },
-  {
-    label: 'Settings',
-    links: [
-      { label: 'Integrations', href: '/integrations', icon: Link2 },
-      { label: 'Settings', href: '/settings', icon: Settings },
-    ]
-  },
+  [
+    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { href: '/analytics', icon: BarChart2, label: 'Analytics' },
+  ],
+  [
+    { href: '/orders', icon: ShoppingCart, label: 'Orders' },
+    { href: '/receiving', icon: Truck, label: 'Receiving' },
+    { href: '/returns', icon: RotateCcw, label: 'Returns' },
+    { href: '/reports', icon: FileText, label: 'Reports' },
+    { href: '/daily-report', icon: CalendarCheck, label: 'Daily Report' },
+    { href: '/damage-reports', icon: Zap, label: 'Damage Reports' },
+  ],
+  [
+    { href: '/inventory', icon: Package, label: 'Inventory' },
+    { href: '/restock', icon: AlertTriangle, label: 'Restock Alerts' },
+    { href: '/shopping-list', icon: ClipboardList, label: 'Shopping List' },
+    { href: '/locations', icon: MapPin, label: 'Locations' },
+    { href: '/baskets', icon: ShoppingBasket, label: 'Baskets' },
+  ],
+  [
+    { href: '/workers', icon: Users, label: 'Workers' },
+    { href: '/incident-log', icon: AlertTriangle, label: 'Incident Log' },
+    { href: '/cleaning', icon: Sparkles, label: 'Cleaning' },
+  ],
 ]
+
+const bottomItems = [
+  { href: '/integrations', icon: Link2, label: 'Integrations' },
+  { href: '/settings', icon: Settings, label: 'Settings' },
+]
+
+function Tooltip({ label, anchorRef }: { label: string; anchorRef: React.RefObject<HTMLElement | null> }) {
+  const [style, setStyle] = useState<React.CSSProperties>({})
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    if (anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect()
+      setStyle({
+        position: 'fixed',
+        top: rect.top + rect.height / 2,
+        left: rect.right + 10,
+        transform: 'translateY(-50%)',
+        zIndex: 9999,
+      })
+    }
+  }, [anchorRef])
+
+  if (!mounted) return null
+  return createPortal(
+    <div
+      style={style}
+      className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-medium whitespace-nowrap shadow-xl pointer-events-none border border-white/10"
+    >
+      {label}
+    </div>,
+    document.body
+  )
+}
+
+function NavItem({ href, icon: Icon, label, active }: { href: string; icon: React.ElementType; label: string; active: boolean }) {
+  const [hovered, setHovered] = useState(false)
+  const ref = useRef<HTMLAnchorElement>(null)
+
+  return (
+    <>
+      <a
+        ref={ref}
+        href={href}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        className={`relative w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
+          active
+            ? 'bg-cyan-500/15 text-cyan-400'
+            : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
+        }`}
+      >
+        {active && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-cyan-400 rounded-r-full -ml-2" />
+        )}
+        <Icon size={17} />
+      </a>
+      {hovered && <Tooltip label={label} anchorRef={ref} />}
+    </>
+  )
+}
+
+function LogoutButton({ onLogout }: { onLogout: () => void }) {
+  const [hovered, setHovered] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+
+  return (
+    <>
+      <button
+        ref={ref}
+        onClick={onLogout}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        className="w-10 h-10 flex items-center justify-center rounded-xl text-gray-600 hover:bg-red-900/20 hover:text-red-400 transition-all mt-1"
+      >
+        <LogOut size={17} />
+      </button>
+      {hovered && <Tooltip label="Sign out" anchorRef={ref} />}
+    </>
+  )
+}
 
 export default function AdminSidebar({ email }: { email: string }) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const [collapsed, setCollapsed] = useState(false)
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -64,73 +131,36 @@ export default function AdminSidebar({ email }: { email: string }) {
   }
 
   return (
-    <aside className={`${collapsed ? 'w-16' : 'w-60'} bg-gray-950 border-r border-gray-800 flex flex-col min-h-screen transition-all duration-200 shrink-0`}>
-      <div className="flex items-center justify-between px-4 py-5 border-b border-gray-800">
-        {!collapsed && (
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-blue-500 rounded-lg flex items-center justify-center shrink-0">
-              <Warehouse size={14} className="text-white" />
-            </div>
-            <div className="flex flex-col leading-none">
-              <span className="font-bold text-white text-sm">Waivy WMS</span>
-              <span className="text-[10px] font-semibold text-blue-400 tracking-wide">BETA</span>
-            </div>
-          </div>
-        )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1 rounded-lg hover:bg-gray-800 text-gray-500 ml-auto"
-        >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
+    <aside className="w-[60px] bg-[#111318] flex flex-col min-h-screen shrink-0 border-r border-white/5">
+      {/* Logo */}
+      <div className="flex items-center justify-center h-14 border-b border-white/5">
+        <div className="w-8 h-8 bg-cyan-500 rounded-lg flex items-center justify-center">
+          <Warehouse size={15} className="text-white" />
+        </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
-        {groups.map(group => (
-          <div key={group.label}>
-            {!collapsed && (
-              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2 px-2">{group.label}</p>
+      {/* Nav */}
+      <nav className="flex-1 flex flex-col gap-4 py-4 overflow-y-auto">
+        {groups.map((group, gi) => (
+          <div key={gi} className="flex flex-col items-center gap-0.5 px-2">
+            {group.map(link => {
+              const active = pathname === link.href || (link.href !== '/dashboard' && pathname.startsWith(link.href))
+              return <NavItem key={link.href} href={link.href} icon={link.icon} label={link.label} active={active} />
+            })}
+            {gi < groups.length - 1 && (
+              <div className="w-6 h-px bg-white/8 my-2 mx-auto" />
             )}
-            <div className="space-y-0.5">
-              {group.links.map(link => {
-                const Icon = link.icon
-                const active = pathname === link.href || (link.href !== '/dashboard' && pathname.startsWith(link.href))
-                return (
-                  <a
-                    key={link.href}
-                    href={link.href}
-                    title={collapsed ? link.label : undefined}
-                    className={`flex items-center gap-3 px-2 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      active
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                    }`}
-                  >
-                    <Icon size={17} />
-                    {!collapsed && <span>{link.label}</span>}
-                  </a>
-                )
-              })}
-            </div>
           </div>
         ))}
       </nav>
 
-      <div className="p-3 border-t border-gray-800 space-y-0.5">
-        {!collapsed && (
-          <div className="px-2 py-2 mb-1">
-            <p className="text-xs font-medium text-gray-300 truncate">{email}</p>
-            <p className="text-xs text-gray-600">Admin</p>
-          </div>
-        )}
-        <button
-          onClick={handleLogout}
-          title={collapsed ? 'Sign out' : undefined}
-          className="flex items-center gap-3 px-2 py-2 rounded-lg text-sm font-medium text-gray-500 hover:bg-red-950 hover:text-red-400 w-full transition-colors"
-        >
-          <LogOut size={17} />
-          {!collapsed && <span>Sign out</span>}
-        </button>
+      {/* Bottom */}
+      <div className="flex flex-col items-center gap-0.5 px-2 pb-4 border-t border-white/5 pt-3">
+        {bottomItems.map(link => {
+          const active = pathname.startsWith(link.href)
+          return <NavItem key={link.href} href={link.href} icon={link.icon} label={link.label} active={active} />
+        })}
+        <LogoutButton onLogout={handleLogout} />
       </div>
     </aside>
   )

@@ -31,7 +31,7 @@ type ReturnItem = {
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
-  inspecting: 'bg-blue-100 text-blue-700',
+  inspecting: 'bg-cyan-100 text-cyan-600',
   restocked: 'bg-green-100 text-green-700',
   disposed: 'bg-gray-100 text-gray-500',
   refunded: 'bg-purple-100 text-purple-700',
@@ -39,7 +39,7 @@ const statusColors: Record<string, string> = {
 
 const conditionColors: Record<string, string> = {
   new: 'bg-green-100 text-green-700',
-  good: 'bg-blue-100 text-blue-700',
+  good: 'bg-cyan-100 text-cyan-600',
   damaged: 'bg-red-100 text-red-700',
   unsellable: 'bg-gray-100 text-gray-500',
 }
@@ -183,6 +183,26 @@ export default function ReturnsPage() {
     fetchReturns()
   }
 
+  async function restockAllEligible(items: ReturnItem[]) {
+    const eligible = items.filter(i => !i.restock && i.condition !== 'damaged' && i.condition !== 'unsellable')
+    if (eligible.length === 0) { toast.info('No eligible items to restock'); return }
+
+    for (const item of eligible) {
+      await supabase.from('return_items').update({ restock: true }).eq('id', item.id)
+      const { data: inv } = await supabase
+        .from('inventory').select('id, qty_on_hand, qty_available')
+        .eq('product_id', item.product_id).eq('org_id', orgId).single()
+      if (inv) {
+        await supabase.from('inventory').update({
+          qty_on_hand: inv.qty_on_hand + item.quantity_returned,
+          qty_available: inv.qty_available + item.quantity_returned,
+        }).eq('id', inv.id)
+      }
+    }
+    toast.success(`${eligible.length} item${eligible.length !== 1 ? 's' : ''} restocked`)
+    fetchReturns()
+  }
+
   useEffect(() => { fetchReturns() }, [filter, orgId])
 
   const toggle = (id: string) => setExpanded(p => ({ ...p, [id]: !p[id] }))
@@ -191,17 +211,17 @@ export default function ReturnsPage() {
     <div className="p-6 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Returns</h1>
+          <h1 className="text-lg font-bold text-gray-900">Returns</h1>
           <p className="text-sm text-gray-500 mt-0.5">Customer returns and RMAs</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+        <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
           <Plus size={16} /> New Return
         </button>
       </div>
 
       {/* Create form */}
       {showForm && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">New Return</h2>
             <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
@@ -209,19 +229,19 @@ export default function ReturnsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">RMA Number</label>
-              <input value={form.rma_number} onChange={e => setForm({ ...form, rma_number: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="RMA-001" autoFocus />
+              <input value={form.rma_number} onChange={e => setForm({ ...form, rma_number: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="RMA-001" autoFocus />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Order Number</label>
-              <input value={form.order_number} onChange={e => setForm({ ...form, order_number: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ORD-1001" />
+              <input value={form.order_number} onChange={e => setForm({ ...form, order_number: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="ORD-1001" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Customer Name</label>
-              <input value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Jane Smith" />
+              <input value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="Jane Smith" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Reason</label>
-              <select value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400">
                 <option value="">Select reason</option>
                 <option value="wrong_item">Wrong item shipped</option>
                 <option value="damaged">Arrived damaged</option>
@@ -233,11 +253,11 @@ export default function ReturnsPage() {
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes</label>
-              <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Optional notes" />
+              <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="Optional notes" />
             </div>
             <div className="col-span-2 flex gap-3 justify-end pt-2">
               <button onClick={() => { setShowForm(false); setForm(emptyForm) }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
-              <button onClick={createReturn} disabled={saving} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              <button onClick={createReturn} disabled={saving} className="bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium">
                 {saving ? 'Creating...' : 'Create Return'}
               </button>
             </div>
@@ -257,7 +277,7 @@ export default function ReturnsPage() {
       {loading ? (
         <div className="text-sm text-gray-400 p-6">Loading...</div>
       ) : returns.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-12 text-center">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-12 text-center">
           <RotateCcw size={36} className="text-gray-300 mx-auto mb-3" />
           <p className="font-semibold text-gray-900">{filter === 'active' ? 'No active returns' : 'No returns found'}</p>
           <p className="text-sm text-gray-400 mt-1">Returns will appear here when customers send items back.</p>
@@ -272,7 +292,7 @@ export default function ReturnsPage() {
             }
 
             return (
-              <div key={ret.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div key={ret.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="flex items-center gap-4 px-6 py-4">
                   <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center shrink-0">
                     <RotateCcw size={18} className="text-orange-500" />
@@ -296,13 +316,18 @@ export default function ReturnsPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {ret.status === 'pending' && (
-                      <button onClick={() => updateStatus(ret.id, 'inspecting')} className="text-xs text-blue-600 border border-blue-200 hover:bg-blue-50 rounded-lg px-2.5 py-1.5 transition-colors">
+                      <button onClick={() => updateStatus(ret.id, 'inspecting')} className="text-xs text-cyan-500 border border-cyan-200 hover:bg-cyan-50 rounded-lg px-2.5 py-1.5 transition-colors">
                         Start Inspection
                       </button>
                     )}
                     {ret.status === 'inspecting' && (
-                      <div className="flex gap-1.5">
-                        <button onClick={() => updateStatus(ret.id, 'restocked')} className="text-xs text-green-600 border border-green-200 hover:bg-green-50 rounded-lg px-2.5 py-1.5 transition-colors font-medium">Restock</button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {ret.return_items.some(i => i.restock) && (
+                          <span className="text-xs text-green-600 font-medium">
+                            {ret.return_items.filter(i => i.restock).length} restocked
+                          </span>
+                        )}
+                        <button onClick={() => updateStatus(ret.id, 'restocked')} className="text-xs text-green-600 border border-green-200 hover:bg-green-50 rounded-lg px-2.5 py-1.5 transition-colors font-medium">Mark Done</button>
                         <button onClick={() => updateStatus(ret.id, 'disposed')} className="text-xs text-gray-500 border border-gray-200 hover:bg-gray-50 rounded-lg px-2.5 py-1.5 transition-colors">Dispose</button>
                         <button onClick={() => updateStatus(ret.id, 'refunded')} className="text-xs text-purple-600 border border-purple-200 hover:bg-purple-50 rounded-lg px-2.5 py-1.5 transition-colors">Refunded</button>
                       </div>
@@ -346,6 +371,17 @@ export default function ReturnsPage() {
                       </div>
                     ))}
 
+                    {ret.status === 'inspecting' && ret.return_items.length > 0 && (
+                      <div className="px-6 py-2 border-b border-gray-50">
+                        <button
+                          onClick={() => restockAllEligible(ret.return_items)}
+                          className="text-xs text-green-600 hover:text-green-700 font-medium flex items-center gap-1"
+                        >
+                          <CheckCircle size={11} /> Restock all eligible items
+                        </button>
+                      </div>
+                    )}
+
                     {(ret.status === 'pending' || ret.status === 'inspecting') && (
                       <div className="px-6 py-3">
                         {addingItemTo === ret.id ? (
@@ -354,24 +390,24 @@ export default function ReturnsPage() {
                               <input
                                 value={addItemForm.sku}
                                 onChange={e => { setAddItemForm(f => ({ ...f, sku: e.target.value })); lookupSku(e.target.value) }}
-                                className="w-28 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-28 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
                                 placeholder="SKU"
                                 autoFocus
                               />
                               {skuMatch && <p className="absolute left-0 -bottom-5 text-xs text-green-600 whitespace-nowrap">{skuMatch.name}</p>}
                             </div>
-                            <input type="number" value={addItemForm.quantity} onChange={e => setAddItemForm(f => ({ ...f, quantity: e.target.value }))} className="w-16 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Qty" min="1" />
-                            <select value={addItemForm.condition} onChange={e => setAddItemForm(f => ({ ...f, condition: e.target.value }))} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="number" value={addItemForm.quantity} onChange={e => setAddItemForm(f => ({ ...f, quantity: e.target.value }))} className="w-16 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="Qty" min="1" />
+                            <select value={addItemForm.condition} onChange={e => setAddItemForm(f => ({ ...f, condition: e.target.value }))} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400">
                               <option value="new">New</option>
                               <option value="good">Good</option>
                               <option value="damaged">Damaged</option>
                               <option value="unsellable">Unsellable</option>
                             </select>
-                            <button onClick={() => addItemToReturn(ret.id)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Add</button>
+                            <button onClick={() => addItemToReturn(ret.id)} className="bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Add</button>
                             <button onClick={() => { setAddingItemTo(null); setAddItemForm({ sku: '', quantity: '1', condition: 'good' }); setSkuMatch(null) }} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                           </div>
                         ) : (
-                          <button onClick={() => setAddingItemTo(ret.id)} className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                          <button onClick={() => setAddingItemTo(ret.id)} className="flex items-center gap-1.5 text-xs text-cyan-500 hover:text-cyan-600 font-medium">
                             <Plus size={12} /> Add Item
                           </button>
                         )}

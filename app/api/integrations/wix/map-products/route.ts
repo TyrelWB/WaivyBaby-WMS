@@ -31,14 +31,16 @@ export async function POST() {
 
   const { data: wmsProducts } = await admin
     .from('products')
-    .select('id, sku')
+    .select('id, sku, name')
     .eq('org_id', adminUser.org_id)
+    .eq('is_sub_product', false)
 
   if (!wmsProducts || wmsProducts.length === 0) {
     return NextResponse.json({ error: 'No products in WMS' }, { status: 400 })
   }
 
   const skuToId = new Map(wmsProducts.map(p => [p.sku.toLowerCase().trim(), p.id]))
+  const nameToId = new Map(wmsProducts.map(p => [p.name.toLowerCase().trim(), p.id]))
 
   // Fetch all Wix products (paginated)
   const allWixProducts: any[] = []
@@ -62,51 +64,62 @@ export async function POST() {
   }
 
   let mapped = 0
-  let skipped = 0
+  const unmatchedWix: { name: string; sku: string }[] = []
 
   for (const wixProduct of allWixProducts) {
-    // inventoryItemId and variant[0].id come directly from the product response
     const invItemId: string | null = wixProduct.inventoryItemId || null
-    // Non-variant products use "00000000-0000-0000-0000-000000000000" as the default variant ID
     const variantId: string | null = wixProduct.variants?.[0]?.id || null
-
     const variants: any[] = wixProduct.variants || []
     let matched = false
+    let wmsId: string | undefined
 
-    // Try to match by variant SKU
+    // 1. Try variant SKU match
     for (const variant of variants) {
       const sku = variant.variant?.sku || variant.sku || ''
       if (!sku) continue
-      const wmsId = skuToId.get(sku.toLowerCase().trim())
-      if (!wmsId) continue
+      wmsId = skuToId.get(sku.toLowerCase().trim())
+      if (wmsId) { matched = true; break }
+    }
 
+    // 2. Try product-level SKU match
+    if (!matched && wixProduct.sku) {
+      wmsId = skuToId.get(wixProduct.sku.toLowerCase().trim())
+      if (wmsId) matched = true
+    }
+
+    // 3. Try name match (normalize: lowercase, trim)
+    if (!matched && wixProduct.name) {
+      wmsId = nameToId.get(wixProduct.name.toLowerCase().trim())
+      if (wmsId) matched = true
+    }
+
+    if (matched && wmsId) {
       await admin.from('products').update({
         wix_product_id: wixProduct.id,
         wix_variant_id: variantId,
         wix_inventory_item_id: invItemId,
       }).eq('id', wmsId)
-
       mapped++
-      matched = true
-    }
-
-    // Fallback: match by product-level SKU
-    if (!matched && wixProduct.sku) {
-      const wmsId = skuToId.get(wixProduct.sku.toLowerCase().trim())
-      if (wmsId) {
-        await admin.from('products').update({
-          wix_product_id: wixProduct.id,
-          wix_variant_id: variantId,
-          wix_inventory_item_id: invItemId,
-        }).eq('id', wmsId)
-        mapped++
-      } else {
-        skipped++
-      }
-    } else if (!matched) {
-      skipped++
+    } else {
+      unmatchedWix.push({
+        name: wixProduct.name || '(no name)',
+        sku: wixProduct.sku || wixProduct.variants?.[0]?.variant?.sku || '(no sku)',
+      })
     }
   }
 
-  return NextResponse.json({ mapped, skipped, total: allWixProducts.length })
+  const { count: unmappedWms } = await admin
+    .from('products')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', adminUser.org_id)
+    .eq('is_sub_product', false)
+    .is('wix_product_id', null)
+
+  return NextResponse.json({
+    mapped,
+    skipped: unmatchedWix.length,
+    total: allWixProducts.length,
+    unmatchedWix,
+    wmsUnmapped: unmappedWms ?? 0,
+  })
 }

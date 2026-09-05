@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, Zap, Package, User, ShoppingBasket, Plus, Trash2, AlertTriangle, Split, ExternalLink, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Zap, Package, User, ShoppingBasket, Plus, Trash2, AlertTriangle, Split, ExternalLink, RefreshCw, Printer, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminContext } from '../../admin-context'
 
@@ -34,6 +34,7 @@ type Order = {
   shipping_country: string | null
   shipping_phone: string | null
   weight_oz: number | null
+  current_location: string | null
   created_at: string
   picker: { id: string; name: string } | null
   packer: { id: string; name: string } | null
@@ -309,19 +310,29 @@ export default function OrderDetailPage() {
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${statusColors[order.status] || 'bg-gray-100 text-gray-600'}`}>
               {order.status.replace('_', ' ')}
             </span>
+            {order.current_location && (
+              <span className="flex items-center gap-1 text-xs bg-orange-50 text-orange-700 font-medium px-2.5 py-1 rounded-full border border-orange-200">
+                <MapPin size={11} /> {order.current_location}
+              </span>
+            )}
           </div>
           {order.customer_name && <p className="text-sm text-gray-500 mt-1">{order.customer_name}{order.customer_email ? ` · ${order.customer_email}` : ''}</p>}
           <p className="text-xs text-gray-400 mt-0.5">{new Date(order.created_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
         </div>
-        <select
-          value={order.status}
-          onChange={e => updateOrder({ status: e.target.value })}
-          className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shrink-0"
-        >
-          {['pending','assigned','picking','picked','packing','packed','shipping','shipped','complete','on_hold','cancelled'].map(s => (
-            <option key={s} value={s}>{s.replace('_', ' ')}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2 shrink-0">
+          <a href={`/print/order/${id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-2 bg-white transition-colors">
+            <Printer size={13} /> Print Sheet
+          </a>
+          <select
+            value={order.status}
+            onChange={e => updateOrder({ status: e.target.value })}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {['pending','assigned','picking','picked','packing','packed','shipping','shipped','complete','on_hold','cancelled'].map(s => (
+              <option key={s} value={s}>{s.replace('_', ' ')}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {order.notes && (
@@ -330,6 +341,40 @@ export default function OrderDetailPage() {
           <p className="text-sm text-yellow-800">{order.notes}</p>
         </div>
       )}
+
+      {/* Status pipeline */}
+      {(() => {
+        const stages = ['pending','assigned','picking','picked','packing','packed','shipping','shipped']
+        const idx = stages.indexOf(order.status)
+        return (
+          <div className="bg-white border border-gray-100 rounded-xl shadow-sm px-5 py-4 mb-5 overflow-x-auto">
+            <div className="flex items-center gap-0 min-w-max">
+              {stages.map((s, i) => {
+                const done = idx > i
+                const active = idx === i
+                return (
+                  <div key={s} className="flex items-center">
+                    <button
+                      onClick={() => updateOrder({ status: s })}
+                      className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg transition-colors ${
+                        active ? 'bg-blue-600 text-white' :
+                        done ? 'text-green-600 hover:bg-green-50' :
+                        'text-gray-300 hover:bg-gray-50 hover:text-gray-500'
+                      }`}
+                    >
+                      <div className={`w-2.5 h-2.5 rounded-full ${active ? 'bg-white' : done ? 'bg-green-500' : 'bg-gray-200'}`} />
+                      <span className="text-xs font-medium capitalize whitespace-nowrap">{s.replace('_', ' ')}</span>
+                    </button>
+                    {i < stages.length - 1 && (
+                      <div className={`h-0.5 w-6 mx-0.5 rounded-full ${i < idx ? 'bg-green-400' : 'bg-gray-150'}`} style={{ background: i < idx ? '#4ade80' : '#f3f4f6' }} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         {/* Left: items */}

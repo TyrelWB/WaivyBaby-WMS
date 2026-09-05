@@ -3,10 +3,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { syncWixOrders } from '@/lib/wix-orders'
 
 export async function GET(req: Request) {
-  const secret = new URL(req.url).searchParams.get('secret')
-  if (secret !== process.env.WMS_CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const auth = req.headers.get('authorization')
+  const querySecret = new URL(req.url).searchParams.get('secret')
+  const ok = auth === `Bearer ${process.env.CRON_SECRET}` || querySecret === process.env.WMS_CRON_SECRET
+  if (!ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminClient()
   const { data: integrations } = await admin

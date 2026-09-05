@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Search, Plus, Zap, Package, ChevronRight, X, Truck } from 'lucide-react'
+import { Search, Plus, Zap, Package, ChevronRight, X, Truck, CheckSquare, Square, Users, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminContext } from '../admin-context'
 
@@ -24,19 +24,13 @@ type Order = {
 
 type Worker = { id: string; name: string; role: string }
 
-const STATUS_OPTIONS = ['pending', 'assigned', 'picking', 'picked', 'packing', 'packed', 'shipping', 'shipped', 'complete', 'on_hold', 'cancelled']
+const STATUS_OPTIONS = ['pending', 'picking', 'packing', 'shipped', 'cancelled']
 
 const statusColors: Record<string, string> = {
-  pending: 'bg-gray-100 text-gray-600',
-  assigned: 'bg-blue-100 text-blue-700',
-  picking: 'bg-yellow-100 text-yellow-700',
-  picked: 'bg-indigo-100 text-indigo-700',
-  packing: 'bg-purple-100 text-purple-700',
-  packed: 'bg-pink-100 text-pink-700',
-  shipping: 'bg-orange-100 text-orange-700',
-  shipped: 'bg-green-100 text-green-700',
-  complete: 'bg-green-100 text-green-700',
-  on_hold: 'bg-red-100 text-red-700',
+  pending:   'bg-gray-100 text-gray-600',
+  picking:   'bg-amber-50 text-amber-600',
+  packing:   'bg-violet-50 text-violet-600',
+  shipped:   'bg-emerald-50 text-emerald-600',
   cancelled: 'bg-gray-100 text-gray-400',
 }
 
@@ -63,6 +57,9 @@ export default function OrdersPage() {
   const [saving, setSaving] = useState(false)
   const [shippingOrder, setShippingOrder] = useState<string | null>(null)
   const [shipForm, setShipForm] = useState({ carrier: '', tracking_number: '' })
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkPicker, setBulkPicker] = useState('')
+  const [bulkAssigning, setBulkAssigning] = useState(false)
 
   async function fetchAll() {
     if (!orgId) { setLoading(false); return }
@@ -121,7 +118,7 @@ export default function OrdersPage() {
   async function assignPicker(orderId: string, workerId: string | null) {
     await supabase.from('orders').update({
       assigned_picker_id: workerId,
-      status: workerId ? 'assigned' : 'pending',
+      status: workerId ? 'picking' : 'pending',
     }).eq('id', orderId)
     toast.success(workerId ? 'Picker assigned' : 'Picker removed')
     fetchAll()
@@ -147,6 +144,21 @@ export default function OrdersPage() {
     fetchAll()
   }
 
+  async function bulkAssignPicker() {
+    if (!bulkPicker || selected.size === 0) return
+    setBulkAssigning(true)
+    const ids = Array.from(selected)
+    await supabase.from('orders').update({
+      assigned_picker_id: bulkPicker,
+      status: 'picking',
+    }).in('id', ids)
+    toast.success(`Assigned ${ids.length} order${ids.length !== 1 ? 's' : ''} to picker`)
+    setSelected(new Set())
+    setBulkPicker('')
+    setBulkAssigning(false)
+    fetchAll()
+  }
+
   async function updateStatus(orderId: string, status: string) {
     await supabase.from('orders').update({ status }).eq('id', orderId)
     toast.success(`Order marked as ${status}`)
@@ -168,7 +180,7 @@ export default function OrdersPage() {
 
   useEffect(() => { fetchAll() }, [orgId])
 
-  const activeStatuses = ['pending', 'assigned', 'picking', 'picked', 'packing', 'packed', 'shipping']
+  const activeStatuses = ['pending', 'picking', 'packing']
 
   const filtered = orders.filter(o => {
     const q = search.toLowerCase()
@@ -185,12 +197,12 @@ export default function OrdersPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
+          <h1 className="text-lg font-bold text-gray-900">Orders</h1>
           <p className="text-sm text-gray-500 mt-0.5">{filtered.length} orders</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
         >
           <Plus size={16} /> New Order
         </button>
@@ -198,7 +210,7 @@ export default function OrdersPage() {
 
       {/* Create order form */}
       {showForm && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-6">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">New Order</h2>
             <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
@@ -206,23 +218,23 @@ export default function OrdersPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Order Number <span className="text-red-400">*</span></label>
-              <input value={form.order_number} onChange={e => setForm({ ...form, order_number: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. 1042" autoFocus />
+              <input value={form.order_number} onChange={e => setForm({ ...form, order_number: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="e.g. 1042" autoFocus />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Customer Name</label>
-              <input value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="John Doe" />
+              <input value={form.customer_name} onChange={e => setForm({ ...form, customer_name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="John Doe" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Customer Email</label>
-              <input type="email" value={form.customer_email} onChange={e => setForm({ ...form, customer_email: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="john@example.com" />
+              <input type="email" value={form.customer_email} onChange={e => setForm({ ...form, customer_email: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="john@example.com" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Total Boxes</label>
-              <input type="number" min={1} value={form.total_boxes} onChange={e => setForm({ ...form, total_boxes: parseInt(e.target.value) || 1 })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="number" min={1} value={form.total_boxes} onChange={e => setForm({ ...form, total_boxes: parseInt(e.target.value) || 1 })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes / Special Instructions</label>
-              <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" rows={2} placeholder="Fragile, gift wrap, etc." />
+              <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400 resize-none" rows={2} placeholder="Fragile, gift wrap, etc." />
             </div>
             <div className="flex items-center gap-6">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -236,7 +248,7 @@ export default function OrdersPage() {
             </div>
             <div className="flex gap-3 justify-end items-end">
               <button onClick={() => { setShowForm(false); setForm(emptyForm) }} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
-              <button onClick={createOrder} disabled={saving} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              <button onClick={createOrder} disabled={saving} className="bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
                 {saving ? 'Creating...' : 'Create Order'}
               </button>
             </div>
@@ -248,14 +260,14 @@ export default function OrdersPage() {
       <div className="flex items-center gap-3 mb-4">
         <div className="relative flex-1 max-w-sm">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search orders..." value={search} onChange={e => setSearch(e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input type="text" placeholder="Search orders..." value={search} onChange={e => setSearch(e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg pl-9 pr-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
         </div>
         <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
-          {['active', 'all', 'shipped', 'complete', 'on_hold', 'cancelled'].map(s => (
+          {['active', 'all', 'shipped', 'cancelled'].map(s => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors ${statusFilter === s ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-colors ${statusFilter === s ? 'bg-cyan-500 text-white' : 'text-gray-500 hover:text-gray-700'}`}
             >
               {s}
             </button>
@@ -263,8 +275,42 @@ export default function OrdersPage() {
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 mb-3 bg-cyan-50 border border-cyan-200 rounded-xl px-5 py-3">
+          <Users size={15} className="text-cyan-500 shrink-0" />
+          <span className="text-sm font-semibold text-cyan-800">{selected.size} order{selected.size !== 1 ? 's' : ''} selected</span>
+          <div className="flex items-center gap-2 ml-2">
+            <span className="text-xs text-cyan-500">Assign to:</span>
+            <select
+              value={bulkPicker}
+              onChange={e => setBulkPicker(e.target.value)}
+              className="text-xs border border-cyan-300 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            >
+              <option value="">— select specialist —</option>
+              {workers.map(w => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+            <button
+              onClick={bulkAssignPicker}
+              disabled={!bulkPicker || bulkAssigning}
+              className="text-xs bg-cyan-500 hover:bg-cyan-600 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg font-medium"
+            >
+              {bulkAssigning ? 'Assigning...' : 'Assign'}
+            </button>
+          </div>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="ml-auto text-xs text-cyan-500 hover:text-cyan-600 font-medium"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Orders table */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-sm text-gray-400">Loading orders...</div>
         ) : filtered.length === 0 ? (
@@ -273,21 +319,46 @@ export default function OrdersPage() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
+                <th className="px-4 py-3 w-10">
+                  <button
+                    onClick={() => {
+                      if (selected.size === filtered.length) setSelected(new Set())
+                      else setSelected(new Set(filtered.map(o => o.id)))
+                    }}
+                    className="text-gray-400 hover:text-cyan-500"
+                  >
+                    {selected.size === filtered.length && filtered.length > 0
+                      ? <CheckSquare size={16} className="text-cyan-500" />
+                      : <Square size={16} />}
+                  </button>
+                </th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Order</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Customer</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Picker</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Specialist</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Packer</th>
+
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Date</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filtered.map(order => (
-                <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={order.id} className={`hover:bg-gray-50 transition-colors ${selected.has(order.id) ? 'bg-cyan-50' : ''}`}>
+                  <td className="px-4 py-3.5">
+                    <button onClick={() => {
+                      const next = new Set(selected)
+                      next.has(order.id) ? next.delete(order.id) : next.add(order.id)
+                      setSelected(next)
+                    }} className="text-gray-300 hover:text-cyan-500">
+                      {selected.has(order.id)
+                        ? <CheckSquare size={16} className="text-cyan-500" />
+                        : <Square size={16} />}
+                    </button>
+                  </td>
                   <td className="px-6 py-3.5">
                     <div className="flex items-center gap-2">
-                      <a href={`/orders/${order.id}`} className="font-semibold text-sm text-gray-900 hover:text-blue-600">
+                      <a href={`/orders/${order.id}`} className="font-semibold text-sm text-gray-900 hover:text-cyan-500">
                         #{order.order_number}
                       </a>
                       {order.is_rush && <span className="text-xs bg-red-100 text-red-600 font-bold px-1.5 py-0.5 rounded">RUSH</span>}
@@ -312,10 +383,10 @@ export default function OrdersPage() {
                     <select
                       value={order.assigned_picker_id || ''}
                       onChange={e => assignPicker(order.id, e.target.value || null)}
-                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-cyan-400"
                     >
                       <option value="">Unassigned</option>
-                      {workers.filter(w => w.role === 'picker' || w.role === 'all').map(w => (
+                      {workers.map(w => (
                         <option key={w.id} value={w.id}>{w.name}</option>
                       ))}
                     </select>
@@ -327,7 +398,7 @@ export default function OrdersPage() {
                       className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-purple-500"
                     >
                       <option value="">Unassigned</option>
-                      {workers.filter(w => w.role === 'packer' || w.role === 'all').map(w => (
+                      {workers.map(w => (
                         <option key={w.id} value={w.id}>{w.name}</option>
                       ))}
                     </select>
@@ -337,8 +408,11 @@ export default function OrdersPage() {
                   </td>
                   <td className="px-6 py-3.5">
                     <div className="flex items-center gap-2">
-                      <a href={`/orders/${order.id}`} className="flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                      <a href={`/orders/${order.id}`} className="flex items-center gap-0.5 text-xs text-cyan-500 hover:text-cyan-600 font-medium">
                         View <ChevronRight size={12} />
+                      </a>
+                      <a href={`/print/order/${order.id}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 font-medium">
+                        <Printer size={11} /> Print
                       </a>
                       {(order.status === 'packed' || order.status === 'shipping') && (
                         <button onClick={() => { setShippingOrder(order.id); setShipForm({ carrier: '', tracking_number: '' }) }} className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700 font-medium">

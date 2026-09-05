@@ -133,26 +133,26 @@ export default function SettingsPage() {
   return (
     <div className="p-6 max-w-2xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <h1 className="text-lg font-bold text-gray-900">Settings</h1>
         <p className="text-sm text-gray-500 mt-0.5">Manage your organization and warehouse configuration</p>
       </div>
 
       {/* Account */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4">
         <h2 className="font-semibold text-gray-900 mb-4">Account</h2>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-900">{adminUser?.email || '—'}</p>
             <p className="text-xs text-gray-400 mt-0.5">Administrator</p>
           </div>
-          <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-red-500 hover:text-red-700 border border-red-200 rounded-lg px-3 py-2 transition-colors">
+          <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-red-500 hover:text-red-700 border border-red-200 rounded-xl px-3 py-2 transition-colors">
             <LogOut size={14} /> Sign Out
           </button>
         </div>
       </div>
 
       {/* Organization */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4">
         <div className="flex items-center gap-2 mb-4">
           <Building2 size={18} className="text-gray-400" />
           <h2 className="font-semibold text-gray-900">Organization</h2>
@@ -163,7 +163,7 @@ export default function SettingsPage() {
             <input
               value={orgForm.name}
               onChange={e => setOrgForm({ name: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
             />
           </div>
           <div>
@@ -171,12 +171,12 @@ export default function SettingsPage() {
             <input
               value={org?.slug || ''}
               disabled
-              className="w-full border border-gray-100 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed"
+              className="w-full border border-gray-100 rounded-xl px-3 py-2 text-sm bg-gray-50 text-gray-400 cursor-not-allowed"
             />
             <p className="text-xs text-gray-400 mt-1">Slug cannot be changed after creation</p>
           </div>
           <div className="flex justify-end">
-            <button onClick={saveOrg} disabled={saving} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            <button onClick={saveOrg} disabled={saving} className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium">
               <Save size={14} /> Save Changes
             </button>
           </div>
@@ -184,7 +184,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Warehouse */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4">
         <h2 className="font-semibold text-gray-900 mb-4">Warehouse</h2>
         <div className="space-y-4">
           <div>
@@ -192,7 +192,7 @@ export default function SettingsPage() {
             <input
               value={warehouseForm.name}
               onChange={e => setWarehouseForm({ ...warehouseForm, name: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
             />
           </div>
           <div>
@@ -201,7 +201,7 @@ export default function SettingsPage() {
               value={warehouseForm.address}
               onChange={e => setWarehouseForm({ ...warehouseForm, address: e.target.value })}
               placeholder="123 Warehouse St, City, State"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
             />
           </div>
           <div>
@@ -209,7 +209,7 @@ export default function SettingsPage() {
             <select
               value={warehouseForm.timezone}
               onChange={e => setWarehouseForm({ ...warehouseForm, timezone: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
             >
               <option value="">Select timezone</option>
               <option value="America/New_York">Eastern Time (ET)</option>
@@ -222,7 +222,7 @@ export default function SettingsPage() {
             </select>
           </div>
           <div className="flex justify-end">
-            <button onClick={saveWarehouse} disabled={saving} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            <button onClick={saveWarehouse} disabled={saving} className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium">
               <Save size={14} /> Save Changes
             </button>
           </div>
@@ -230,14 +230,14 @@ export default function SettingsPage() {
       </div>
 
       {/* Import Sub-Products */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 mb-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4">
         <div className="flex items-center gap-2 mb-1">
           <PackagePlus size={18} className="text-gray-400" />
           <h2 className="font-semibold text-gray-900">Import Sub-Products</h2>
         </div>
         <p className="text-sm text-gray-500 mb-4">Import the 63 pre-configured sub-products into your inventory. Safe to run multiple times — existing items are skipped.</p>
         {importResult && (
-          <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2 mb-3">
+          <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2 mb-3">
             <CheckCircle size={14} className="shrink-0" />
             <span>{importResult.inserted} added, {importResult.skipped} already existed</span>
           </div>
@@ -245,7 +245,7 @@ export default function SettingsPage() {
         <button
           onClick={importSubProducts}
           disabled={importingSubProducts}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
+          className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium"
         >
           {importingSubProducts ? <Loader2 size={14} className="animate-spin" /> : <PackagePlus size={14} />}
           {importingSubProducts ? 'Importing...' : 'Import Sub-Products'}
@@ -268,7 +268,7 @@ export default function SettingsPage() {
             {!showResetConfirm && (
               <button
                 onClick={() => setShowResetConfirm(true)}
-                className="text-xs text-red-600 border border-red-300 hover:bg-red-100 rounded-lg px-3 py-2 transition-colors font-medium shrink-0"
+                className="text-xs text-red-600 border border-red-300 hover:bg-red-100 rounded-xl px-3 py-2 transition-colors font-medium shrink-0"
               >
                 Reset Data
               </button>
@@ -280,7 +280,7 @@ export default function SettingsPage() {
               <input
                 value={resetConfirm}
                 onChange={e => setResetConfirm(e.target.value)}
-                className="w-full border border-red-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400 font-mono"
+                className="w-full border border-red-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400 font-mono"
                 placeholder="RESET"
                 autoFocus
               />
@@ -288,7 +288,7 @@ export default function SettingsPage() {
                 <button
                   onClick={handleReset}
                   disabled={resetting || resetConfirm !== 'RESET'}
-                  className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                  className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white py-2 rounded-xl text-sm font-medium transition-colors"
                 >
                   {resetting ? 'Resetting...' : 'Confirm Reset'}
                 </button>

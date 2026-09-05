@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'Missing API key or Site ID' })
     }
     try {
-      const res = await fetch('https://www.wixapis.com/ecommerce/v1/orders/query', {
+      const res = await fetch('https://www.wixapis.com/stores/v1/products/query', {
         method: 'POST',
         headers: {
           'Authorization': creds.api_key,

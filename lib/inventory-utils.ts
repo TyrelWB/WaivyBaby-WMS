@@ -117,32 +117,74 @@ export async function reserveOrderInventory(
 
   if (!items || items.length === 0) return { ok: true }
 
-  // Check all items have sufficient stock before reserving any
-  const insufficient: string[] = []
-  for (const item of items) {
-    const { data: inv } = await admin
-      .from('inventory')
-      .select('qty_available')
-      .eq('product_id', item.product_id)
-      .single()
+  const productIds = items.map((i: any) => i.product_id)
 
-    const available = inv?.qty_available ?? 0
-    if (available < item.quantity_ordered) {
-      const p = item.products as any
-      insufficient.push(`${p?.name || item.product_id} (need ${item.quantity_ordered}, have ${available})`)
+  // Resolve component structure (handles regular, bundle, and collection products)
+  const { data: firstLevel } = await admin
+    .from('product_components')
+    .select('product_id, sub_product_id, quantity')
+    .in('product_id', productIds)
+
+  const firstLevelIds = [...new Set((firstLevel || []).map((c: any) => c.sub_product_id))]
+
+  const { data: secondLevel } = firstLevelIds.length > 0
+    ? await admin.from('product_components').select('product_id, sub_product_id, quantity').in('product_id', firstLevelIds)
+    : { data: [] }
+
+  const componentMap: Record<string, { sub_product_id: string; quantity: number }[]> = {}
+  for (const c of firstLevel || []) {
+    if (!componentMap[c.product_id]) componentMap[c.product_id] = []
+    componentMap[c.product_id].push({ sub_product_id: c.sub_product_id, quantity: c.quantity })
+  }
+
+  const subComponentMap: Record<string, { sub_product_id: string; quantity: number }[]> = {}
+  for (const c of secondLevel || []) {
+    if (!subComponentMap[c.product_id]) subComponentMap[c.product_id] = []
+    subComponentMap[c.product_id].push({ sub_product_id: c.sub_product_id, quantity: c.quantity })
+  }
+
+  // Build flat list of (productId, qty) to reserve from leaf inventory
+  type LeafReservation = { productId: string; qty: number; label: string }
+  const reservations: LeafReservation[] = []
+
+  for (const item of items) {
+    const p = item.products as any
+    const label = p?.name || item.product_id
+    const itemComponents = componentMap[item.product_id]
+
+    if (!itemComponents || itemComponents.length === 0) {
+      reservations.push({ productId: item.product_id, qty: item.quantity_ordered, label })
+    } else {
+      for (const comp of itemComponents) {
+        const subComps = subComponentMap[comp.sub_product_id]
+        if (subComps && subComps.length > 0) {
+          for (const sub of subComps) {
+            reservations.push({ productId: sub.sub_product_id, qty: sub.quantity * comp.quantity * item.quantity_ordered, label })
+          }
+        } else {
+          reservations.push({ productId: comp.sub_product_id, qty: comp.quantity * item.quantity_ordered, label })
+        }
+      }
     }
   }
 
-  if (insufficient.length > 0) {
-    return { ok: false, error: 'Insufficient stock', insufficient }
+  // Check availability before reserving anything
+  const insufficient: string[] = []
+  for (const r of reservations) {
+    const { data: inv } = await admin.from('inventory').select('qty_available').eq('product_id', r.productId).maybeSingle()
+    if ((inv?.qty_available ?? 0) < r.qty) {
+      insufficient.push(`${r.label} (need ${r.qty}, have ${inv?.qty_available ?? 0})`)
+    }
   }
 
-  for (const item of items) {
+  if (insufficient.length > 0) return { ok: false, error: 'Insufficient stock', insufficient }
+
+  for (const r of reservations) {
     await recordInventoryMovement({
       orgId,
-      productId: item.product_id,
+      productId: r.productId,
       movementType: 'reserve',
-      quantityChange: item.quantity_ordered,
+      quantityChange: r.qty,
       referenceType: 'order',
       referenceId: orderId,
       note: 'Reserved on order creation',

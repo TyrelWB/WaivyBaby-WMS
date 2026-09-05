@@ -42,20 +42,35 @@ export async function syncWixOrders(
   }
 
   const creds = integration.credentials as Record<string, any>
-  const webhookSecret = creds?.webhook_secret as string | undefined
   const apiKey = (creds?.api_key as string) || ''
   const siteId = (creds?.site_id as string) || ''
 
-  const veloRes = await fetch(
-    `https://www.waivybaby.com/_functions/getNewOrders?secret=${webhookSecret || 'waivybaby2024'}`
-  )
-
-  if (!veloRes.ok) {
-    const err = await veloRes.text()
-    return { imported: 0, updated: 0, skipped: 0, total: 0, errors: [`Velo error (${veloRes.status}): ${err.slice(0, 200)}`] }
+  if (!apiKey || !siteId) {
+    return { imported: 0, updated: 0, skipped: 0, total: 0, errors: ['Wix API key or site ID missing'] }
   }
 
-  const wixData = await veloRes.json()
+  const headers = { 'Authorization': apiKey, 'wix-site-id': siteId, 'Content-Type': 'application/json' }
+
+  // Fetch paid orders from last 90 days via Wix eCommerce REST API
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+  const wixRes = await fetch('https://www.wixapis.com/ecommerce/v1/orders/search', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      search: {
+        filter: { 'paymentStatus': { '$hasSome': ['PAID', 'FULLY_PAID', 'NOT_APPLICABLE'] } },
+        sort: [{ fieldName: '_createdDate', order: 'DESC' }],
+        paging: { limit: 100 },
+      },
+    }),
+  })
+
+  if (!wixRes.ok) {
+    const err = await wixRes.text()
+    return { imported: 0, updated: 0, skipped: 0, total: 0, errors: [`Wix API error (${wixRes.status}): ${err.slice(0, 200)}`] }
+  }
+
+  const wixData = await wixRes.json()
   const wixOrders: any[] = wixData.orders || []
 
   let imported = 0
@@ -67,12 +82,8 @@ export async function syncWixOrders(
     const wixOrderId = veloOrder._id || veloOrder.id
     if (!wixOrderId) { skipped++; continue }
 
-    const fullOrder = apiKey && siteId
-      ? (await fetchFullWixOrder(wixOrderId, apiKey, siteId)) || veloOrder
-      : veloOrder
-
-    const { customerName, customerEmail, contact, shipAddr } = parseOrderFields(fullOrder)
-    const lineItems: any[] = fullOrder.lineItems || veloOrder.lineItems || []
+    const { customerName, customerEmail, contact, shipAddr } = parseOrderFields(veloOrder)
+    const lineItems: any[] = veloOrder.lineItems || []
 
     const { data: existing } = await admin
       .from('orders')
@@ -101,9 +112,17 @@ export async function syncWixOrders(
 
       if (!hasItems) {
         for (const item of lineItems) {
+          const wixProductId = item.catalogReference?.catalogItemId || null
           const sku = item.catalogReference?.externalReference || item.physicalProperties?.sku || ''
-          if (!sku) continue
-          const { data: product } = await admin.from('products').select('id').eq('org_id', orgId).ilike('sku', sku).maybeSingle()
+          let product: { id: string } | null = null
+          if (wixProductId) {
+            const { data } = await admin.from('products').select('id').eq('org_id', orgId).eq('wix_product_id', wixProductId).maybeSingle()
+            product = data
+          }
+          if (!product && sku) {
+            const { data } = await admin.from('products').select('id').eq('org_id', orgId).ilike('sku', sku).maybeSingle()
+            product = data
+          }
           if (!product) continue
           await admin.from('order_items').insert({
             order_id: existing.id,
@@ -161,13 +180,13 @@ export async function syncWixOrders(
       org_id: orgId,
       warehouse_id: warehouseId,
       wix_order_id: wixOrderId,
-      order_number: `WIX-${fullOrder.number || wixOrderId.slice(0, 8)}`,
+      order_number: `WIX-${veloOrder.number || wixOrderId.slice(0, 8)}`,
       customer_name: customerName,
       customer_email: customerEmail,
       status: 'pending',
       is_rush: false,
       is_bulk: false,
-      notes: `Wix #${fullOrder.number || wixOrderId}`,
+      notes: `Wix #${veloOrder.number || wixOrderId}`,
       ...(shipAddr ? {
         shipping_name: customerName,
         shipping_address_1: shipAddr.addressLine || shipAddr.addressLine1 || null,
@@ -181,15 +200,23 @@ export async function syncWixOrders(
     }).select('id, order_number').single()
 
     if (orderError || !order) {
-      errors.push(`Failed to create order ${fullOrder.number}: ${orderError?.message}`)
+      errors.push(`Failed to create order ${veloOrder.number}: ${orderError?.message}`)
       skipped++
       continue
     }
 
     for (const item of lineItems) {
+      const wixProductId = item.catalogReference?.catalogItemId || null
       const sku = item.catalogReference?.externalReference || item.physicalProperties?.sku || ''
-      if (!sku) continue
-      const { data: product } = await admin.from('products').select('id').eq('org_id', orgId).ilike('sku', sku).maybeSingle()
+      let product: { id: string } | null = null
+      if (wixProductId) {
+        const { data } = await admin.from('products').select('id').eq('org_id', orgId).eq('wix_product_id', wixProductId).maybeSingle()
+        product = data
+      }
+      if (!product && sku) {
+        const { data } = await admin.from('products').select('id').eq('org_id', orgId).ilike('sku', sku).maybeSingle()
+        product = data
+      }
       if (!product) continue
       await admin.from('order_items').insert({
         order_id: order.id,

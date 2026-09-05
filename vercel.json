@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-summary",
+      "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/low-stock-alert",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}

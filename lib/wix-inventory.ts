@@ -81,26 +81,86 @@ export async function fulfillWixOrder(
 
 async function calculateBundleAvailability(productId: string): Promise<number | null> {
   const components = await sql`
-    SELECT pc.quantity, COALESCE(i.qty_available, 0) AS qty_available
-    FROM public.product_components pc
-    LEFT JOIN public.inventory i ON i.product_id = pc.sub_product_id
-    WHERE pc.product_id = ${productId}
+    SELECT sub_product_id, quantity FROM public.product_components WHERE product_id = ${productId}
   `
   if ((components as any[]).length === 0) return null
+
   let min = Infinity
   for (const c of components as any[]) {
-    const canMake = Math.floor(c.qty_available / c.quantity)
+    // Check if this component is itself a bundle (has its own sub-products)
+    const subComponents = await sql`
+      SELECT pc.quantity, COALESCE(i.qty_available, 0) AS qty_available
+      FROM public.product_components pc
+      LEFT JOIN public.inventory i ON i.product_id = pc.sub_product_id
+      WHERE pc.product_id = ${c.sub_product_id}
+    `
+    let componentAvailable: number
+    if ((subComponents as any[]).length > 0) {
+      // Nested bundle (e.g. collection → product → sub-products)
+      let subMin = Infinity
+      for (const sc of subComponents as any[]) {
+        const canMake = Math.floor(sc.qty_available / sc.quantity)
+        if (canMake < subMin) subMin = canMake
+      }
+      componentAvailable = subMin === Infinity ? 0 : Math.max(0, subMin)
+    } else {
+      // Leaf component — read its own inventory
+      const invRows = await sql`
+        SELECT COALESCE(qty_available, 0) AS qty_available FROM public.inventory WHERE product_id = ${c.sub_product_id}
+      `
+      componentAvailable = (invRows as any[])[0]?.qty_available ?? 0
+    }
+    const canMake = Math.floor(componentAvailable / c.quantity)
     if (canMake < min) min = canMake
   }
   return min === Infinity ? 0 : Math.max(0, min)
 }
 
+async function refreshBundleInventory(productId: string, orgId: string): Promise<void> {
+  const admin = createAdminClient()
+  const bundleAvailable = await calculateBundleAvailability(productId)
+  if (bundleAvailable === null) return
+
+  const qty = Math.max(0, bundleAvailable)
+
+  const { data: warehouseRow } = await admin.from('admin_users').select('warehouse_id').eq('org_id', orgId).limit(1).single()
+  const warehouseId = warehouseRow?.warehouse_id || null
+
+  await sql`
+    WITH updated AS (
+      UPDATE public.inventory SET
+        qty_on_hand   = ${qty},
+        qty_available = ${qty},
+        updated_at    = NOW()
+      WHERE product_id = ${productId}
+      RETURNING id
+    )
+    INSERT INTO public.inventory (product_id, org_id, warehouse_id, qty_on_hand, qty_available, qty_reserved, qty_picked, qty_damaged)
+    SELECT ${productId}, ${orgId}, ${warehouseId}, ${qty}, ${qty}, 0, 0, 0
+    WHERE NOT EXISTS (SELECT 1 FROM updated)
+  `
+
+  syncInventoryToWix(productId, orgId).catch(() => {})
+}
+
 export async function syncBundlesUsingSubProduct(subProductId: string, orgId: string): Promise<void> {
-  const bundles = await sql`
+  // Find direct parents (products that use this sub-product)
+  const directParents = await sql`
     SELECT DISTINCT product_id FROM public.product_components WHERE sub_product_id = ${subProductId}
   `
-  for (const bundle of bundles as any[]) {
-    syncInventoryToWix(bundle.product_id, orgId).catch(() => {})
+  const parentIds = (directParents as any[]).map(r => r.product_id)
+
+  // Also find grandparent collections (collections that use those products)
+  const allIds = new Set<string>(parentIds)
+  if (parentIds.length > 0) {
+    const grandParents = await sql`
+      SELECT DISTINCT product_id FROM public.product_components WHERE sub_product_id = ANY(${parentIds}::uuid[])
+    `
+    for (const gp of grandParents as any[]) allIds.add(gp.product_id)
+  }
+
+  for (const id of allIds) {
+    refreshBundleInventory(id, orgId).catch(() => {})
   }
 }
 
@@ -154,40 +214,14 @@ export async function syncInventoryToWix(productId: string, orgId: string, delta
 
   const bundleAvailable = await calculateBundleAvailability(productId)
   const availableQty = bundleAvailable !== null ? bundleAvailable : Math.max(0, inventory?.qty_on_hand || 0)
-  const { webhook_secret } = integration.credentials
 
-  // Compute the delta to send to Wix.
-  // If called from a movement, delta is already known.
-  // If called from bulk Push Inventory (no delta), look up the last successfully synced qty
-  // from sync_logs and compute the difference — so we never call updateInventoryVariantFieldsByProductId
-  // which disables Wix inventory tracking.
-  let syncDelta: number
-  if (delta !== undefined) {
-    syncDelta = delta
-  } else {
-    const { data: lastSync } = await admin
-      .from('sync_logs')
-      .select('payload')
-      .eq('org_id', orgId)
-      .eq('provider', 'wix')
-      .eq('event_type', 'inventory_update')
-      .eq('reference_id', productId)
-      .eq('status', 'success')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    const lastWixQty: number = lastSync?.payload?.availableQty ?? 0
-    syncDelta = availableQty - lastWixQty
-  }
-
-  // Call the Wix Velo HTTP function (has full backend inventory access)
-  const veloUrl = `https://www.waivybaby.com/_functions/updateInventory`
-  const payload = {
-    secret: webhook_secret || 'waivybaby2024',
-    inventoryItemId: product.wix_inventory_item_id,
+  // Call Wix Velo backend function with absolute quantity
+  const wixUrl = `https://www.waivybaby.com/_functions/updateInventory`
+  const wixPayload = {
+    secret: integration.credentials.webhook_secret || 'waivybaby2024',
     productId: product.wix_product_id,
     variantId,
-    delta: syncDelta,
+    quantity: availableQty,
   }
 
   let status = 'success'
@@ -195,15 +229,15 @@ export async function syncInventoryToWix(productId: string, orgId: string, delta
   let response: any = {}
 
   try {
-    const res = await fetch(veloUrl, {
+    const res = await fetch(wixUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(wixPayload),
     })
     response = await res.json().catch(() => ({}))
     if (!res.ok) {
       status = 'failed'
-      error = `Velo function error (${res.status}): ${JSON.stringify(response).slice(0, 200)}`
+      error = `Velo error (${res.status}): ${JSON.stringify(response).slice(0, 300)}`
     }
   } catch (e: any) {
     status = 'failed'
@@ -217,7 +251,7 @@ export async function syncInventoryToWix(productId: string, orgId: string, delta
     status,
     reference_type: 'product',
     reference_id: productId,
-    payload: { productId, availableQty, sku: product.sku, ...(delta !== undefined ? { delta } : {}) },
+    payload: { productId, availableQty, sku: product.sku, inventoryItemId: product.wix_inventory_item_id, variantId, wixProductId: product.wix_product_id },
     response,
     error: error || null,
   })
@@ -232,6 +266,7 @@ export async function syncAllInventoryToWix(orgId: string): Promise<{ synced: nu
     .from('products')
     .select('id, sku, wix_inventory_item_id')
     .eq('org_id', orgId)
+    .eq('is_sub_product', false)
     .not('wix_inventory_item_id', 'is', null)
     .not('wix_product_id', 'is', null)
 

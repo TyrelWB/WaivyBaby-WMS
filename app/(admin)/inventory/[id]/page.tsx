@@ -145,14 +145,9 @@ export default function InventoryDetailPage() {
   }
 
   async function fetchProduct() {
-    if (!orgId) { setLoading(false); return }
-
-    const [{ data: prodData }, { data: invData }, { data: barcodeData }, { data: adjData }] = await Promise.all([
-      supabase.from('products').select('id, name, sku, description, price, weight, reorder_point, image_url').eq('id', productId).single(),
-      supabase.from('inventory').select('id, qty_on_hand, qty_available, qty_reserved, qty_picked, qty_damaged, bins(id, location_code)').eq('product_id', productId).eq('org_id', orgId).single(),
-      supabase.from('product_barcodes').select('id, barcode, is_primary').eq('product_id', productId).order('is_primary', { ascending: false }),
-      supabase.from('inventory_adjustments').select('id, adjustment_type, qty_change, reason, created_at, workers(name)').eq('product_id', productId).eq('org_id', orgId).order('created_at', { ascending: false }).limit(20),
-    ])
+    const res = await fetch(`/api/products/${productId}`)
+    if (!res.ok) { setLoading(false); return }
+    const { product: prodData, inventory: invData, barcodes: barcodeData, adjustments: adjData } = await res.json()
 
     const inv = invData as unknown as InventoryRecord | null
 
