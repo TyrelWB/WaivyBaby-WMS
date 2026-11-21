@@ -26,30 +26,6 @@ export async function POST(req: Request) {
 
   const creds = integration.credentials
 
-  if (provider === 'wix') {
-    if (!creds.api_key || !creds.site_id) {
-      return NextResponse.json({ ok: false, error: 'Missing API key or Site ID' })
-    }
-    try {
-      const res = await fetch('https://www.wixapis.com/stores/v1/products/query', {
-        method: 'POST',
-        headers: {
-          'Authorization': creds.api_key,
-          'wix-site-id': creds.site_id,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query: { paging: { limit: 1 } } }),
-      })
-      if (!res.ok) {
-        const text = await res.text()
-        return NextResponse.json({ ok: false, error: `Wix responded ${res.status}: ${text.slice(0, 200)}` })
-      }
-      return NextResponse.json({ ok: true })
-    } catch (e: any) {
-      return NextResponse.json({ ok: false, error: e.message })
-    }
-  }
-
   if (provider === 'shipstation') {
     if (!creds.api_key || !creds.api_secret) {
       return NextResponse.json({ ok: false, error: 'Missing API key or secret' })

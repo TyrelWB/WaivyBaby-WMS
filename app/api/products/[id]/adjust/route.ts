@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     movementType: movement_type || 'adjust',
     quantityChange: qty_change,
     note: note || 'Manual adjustment',
-    syncToWix: true,
+    syncBundles: true,
   })
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })

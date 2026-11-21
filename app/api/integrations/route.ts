@@ -16,9 +16,9 @@ export async function GET() {
     .select('provider, is_enabled, credentials, last_synced_at')
     .eq('org_id', adminUser.org_id)
 
-  if (error) return NextResponse.json({ wix: null, shipstation: null, needsMigration: true })
+  if (error) return NextResponse.json({ shipstation: null, needsMigration: true })
 
-  const result: Record<string, unknown> = { wix: null, shipstation: null }
+  const result: Record<string, unknown> = { shipstation: null }
   for (const row of data || []) {
     const creds = row.credentials || {}
     const fields = Object.keys(creds).filter(k => !!creds[k])

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { fulfillWixOrder } from '@/lib/wix-inventory'
 
 export async function POST(req: Request) {
   const supabase = await createClient()
@@ -122,9 +121,6 @@ export async function POST(req: Request) {
     label_url: labelUrl,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'order_id,provider' })
-
-  // Fire-and-forget: mark Wix order fulfilled so customer gets tracking email
-  fulfillWixOrder(orderId, adminUser.org_id).catch(() => {})
 
   return NextResponse.json({ tracking: trackingNumber, labelUrl, cost: shipmentCost, carrier: carrierCode, service: serviceCode })
 }

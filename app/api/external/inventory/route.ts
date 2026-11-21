@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { syncBundlesUsingSubProduct } from '@/lib/wix-inventory'
+import { syncBundlesUsingSubProduct } from '@/lib/bundle-inventory'
 import { pushStockToStripe } from '@/lib/stripe-inventory'
 
 function checkApiKey(req: NextRequest): boolean {

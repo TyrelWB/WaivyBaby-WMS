@@ -263,13 +263,6 @@ export default function ShipPage() {
       changes: { status: 'shipped' }, note: `Shipped by ${worker.name}`,
     })
 
-    if (order.tracking_number) {
-      fetch('/api/integrations/wix/fulfill-order', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: order.id }),
-      }).catch(() => {})
-    }
-
     playSuccess()
     setDone(true)
     setConfirming(false)

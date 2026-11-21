@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Search, Plus, Package, AlertTriangle, X, Barcode, UploadCloud, Loader2, ChevronDown, Layers, Edit2, Camera, Trash2 } from 'lucide-react'
+import { Search, Plus, Package, AlertTriangle, X, Barcode, Loader2, ChevronDown, Layers, Edit2, Camera, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { generateBinBarcode } from '@/lib/barcode'
 import { useAdminContext } from '../admin-context'
@@ -71,8 +71,6 @@ export default function InventoryPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
-  const [pushingWix, setPushingWix] = useState<string | null>(null)
-  const [syncingAllWix, setSyncingAllWix] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [collections, setCollections] = useState<CollectionView[]>([])
   const [loadingCollections, setLoadingCollections] = useState(false)
@@ -162,36 +160,8 @@ export default function InventoryPage() {
     })
 
     if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Adjustment failed'); return }
-    toast.success(`Stock updated — Wix synced`)
+    toast.success('Stock updated')
     fetchProducts()
-  }
-
-  async function syncAllToWix() {
-    setSyncingAllWix(true)
-    const res = await fetch('/api/integrations/wix/sync-inventory', { method: 'POST' })
-    const d = await res.json()
-    if (d.errors?.length) {
-      toast.error(d.errors[0])
-    } else if (d.synced > 0) {
-      toast.success(`Synced ${d.synced} products to Wix`)
-    } else {
-      toast.error('No products mapped to Wix — run Map Products in Integrations first')
-    }
-    setSyncingAllWix(false)
-  }
-
-  async function pushToWix(productId: string) {
-    setPushingWix(productId)
-    const res = await fetch('/api/integrations/wix/sync-inventory', { method: 'POST' })
-    const d = await res.json()
-    if (d.errors?.length) {
-      toast.error(d.errors[0])
-    } else if (d.synced > 0) {
-      toast.success('Updated on Wix')
-    } else {
-      toast.error('Not mapped to Wix — run Map Products in Integrations first')
-    }
-    setPushingWix(null)
   }
 
   async function deleteProduct(id: string) {
@@ -362,10 +332,6 @@ export default function InventoryPage() {
           <p className="text-sm text-gray-500 mt-0.5">{tabProducts.length} SKUs · {lowStockCount > 0 && <span className="text-orange-500">{lowStockCount} low stock</span>}{lowStockCount > 0 && outStockCount > 0 && ' · '}{outStockCount > 0 && <span className="text-red-500">{outStockCount} out of stock</span>}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={syncAllToWix} disabled={syncingAllWix} className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
-            {syncingAllWix ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
-            Sync All to Wix
-          </button>
           {tab !== 'collections' && (
             <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
               <Plus size={16} /> {tab === 'sub-products' ? 'Add Sub-product' : 'Add Product'}
@@ -807,12 +773,6 @@ export default function InventoryPage() {
                       <div className="flex items-center gap-3">
                         <button onClick={() => adjustStock(product.id, totalStock)} className="text-xs text-cyan-500 hover:text-cyan-600 font-medium">Adjust</button>
                         <a href={`/inventory/${product.id}`} className="text-xs text-gray-500 hover:text-gray-700 font-medium">Details</a>
-                        {!subProductIds.has(product.id) && (
-                          <button onClick={() => pushToWix(product.id)} disabled={pushingWix === product.id} className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium disabled:opacity-40">
-                            {pushingWix === product.id ? <Loader2 size={10} className="animate-spin" /> : <UploadCloud size={11} />}
-                            Update
-                          </button>
-                        )}
                         <button
                           onClick={async () => {
                             const is_sub_product = tab !== 'sub-products'

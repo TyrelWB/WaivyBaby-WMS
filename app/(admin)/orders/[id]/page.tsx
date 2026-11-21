@@ -128,25 +128,6 @@ export default function OrderDetailPage() {
 
   async function updateOrder(updates: Record<string, unknown>) {
     await supabase.from('orders').update(updates).eq('id', id)
-
-    const newStatus = updates.status as string | undefined
-    const prevStatus = order?.status
-    const fulfilledStatuses = ['shipped', 'complete']
-    const transitioningToFulfilled = newStatus && fulfilledStatuses.includes(newStatus) && !fulfilledStatuses.includes(prevStatus ?? '')
-    if (transitioningToFulfilled) {
-      const trackingNumber = (updates.tracking_number ?? order?.tracking_number) as string | null
-      if (trackingNumber) {
-        fetch('/api/integrations/wix/fulfill-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderId: id }),
-        }).then(r => r.json()).then(data => {
-          if (data.ok) toast.success('Wix order marked as fulfilled')
-          else if (!data.skipped) toast.error(`Wix fulfill failed: ${data.error}`)
-        }).catch(() => {})
-      }
-    }
-
     fetchAll()
   }
 

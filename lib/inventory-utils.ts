@@ -1,5 +1,5 @@
 import { createAdminClient } from './supabase/admin'
-import { syncBundlesUsingSubProduct } from './wix-inventory'
+import { syncBundlesUsingSubProduct } from './bundle-inventory'
 import sql from './db'
 
 export type MovementType = 'receive' | 'reserve' | 'release' | 'ship' | 'adjust' | 'damage' | 'return' | 'cancel'
@@ -12,10 +12,10 @@ export async function recordInventoryMovement(params: {
   referenceType?: string
   referenceId?: string
   note?: string
-  syncToWix?: boolean
+  syncBundles?: boolean
 }): Promise<{ ok: boolean; error?: string; qty_on_hand?: number; qty_reserved?: number; qty_available?: number }> {
   const admin = createAdminClient()
-  const { orgId, productId, movementType, quantityChange, referenceType, referenceId, note, syncToWix = true } = params
+  const { orgId, productId, movementType, quantityChange, referenceType, referenceId, note, syncBundles = true } = params
 
   const abs = Math.abs(quantityChange)
 
@@ -96,8 +96,7 @@ export async function recordInventoryMovement(params: {
     note: note || null,
   })
 
-  if (syncToWix) {
-    // Wix storefront retired — only recalculate local bundle stock, no outbound push.
+  if (syncBundles) {
     syncBundlesUsingSubProduct(productId, orgId).catch(() => {})
   }
 

@@ -16,7 +16,6 @@ type Worker = {
 }
 
 type IntegrationStatus = {
-  wix: boolean
   shipstation: boolean
 }
 
@@ -38,14 +37,10 @@ export default function OnboardingPage() {
   const [workers, setWorkers] = useState<Worker[]>([])
   const [workerError, setWorkerError] = useState('')
 
-  const [wixApiKey, setWixApiKey] = useState('')
-  const [wixSiteId, setWixSiteId] = useState('')
   const [ssApiKey, setSsApiKey] = useState('')
   const [ssApiSecret, setSsApiSecret] = useState('')
-  const [integrations, setIntegrations] = useState<IntegrationStatus>({ wix: false, shipstation: false })
-  const [wixLoading, setWixLoading] = useState(false)
+  const [integrations, setIntegrations] = useState<IntegrationStatus>({ shipstation: false })
   const [ssLoading, setSsLoading] = useState(false)
-  const [wixError, setWixError] = useState('')
   const [ssError, setSsError] = useState('')
 
   useEffect(() => {
@@ -95,24 +90,6 @@ export default function OnboardingPage() {
     setWorkers(prev => prev.filter((_, i) => i !== index))
   }
 
-  async function handleConnectWix() {
-    setWixError('')
-    if (!wixApiKey.trim() || !wixSiteId.trim()) { setWixError('Both fields are required.'); return }
-    setWixLoading(true)
-    try {
-      const res = await fetch('/api/integrations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: 'wix', credentials: { api_key: wixApiKey.trim(), site_id: wixSiteId.trim() } }),
-      })
-      if (!res.ok) { const d = await res.json(); setWixError(d?.error || 'Connection failed.') }
-      else setIntegrations(prev => ({ ...prev, wix: true }))
-    } catch {
-      setWixError('Connection failed.')
-    }
-    setWixLoading(false)
-  }
-
   async function handleConnectShipStation() {
     setSsError('')
     if (!ssApiKey.trim() || !ssApiSecret.trim()) { setSsError('Both fields are required.'); return }
@@ -131,7 +108,7 @@ export default function OnboardingPage() {
     setSsLoading(false)
   }
 
-  const connectedCount = [integrations.wix, integrations.shipstation].filter(Boolean).length
+  const connectedCount = [integrations.shipstation].filter(Boolean).length
 
   const stepMeta = [
     { label: 'Welcome', icon: Warehouse },
@@ -330,48 +307,6 @@ export default function OnboardingPage() {
             </div>
 
             <div className="space-y-5">
-              {/* Wix */}
-              <div className="border border-gray-200 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Link2 size={16} className="text-gray-500" />
-                    <span className="font-semibold text-gray-900 text-sm">Wix</span>
-                  </div>
-                  {integrations.wix && (
-                    <div className="flex items-center gap-1.5 text-green-600">
-                      <CheckCircle size={16} />
-                      <span className="text-xs font-medium">Connected</span>
-                    </div>
-                  )}
-                </div>
-                {!integrations.wix && (
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      value={wixApiKey}
-                      onChange={e => setWixApiKey(e.target.value)}
-                      placeholder="API Key"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <input
-                      type="text"
-                      value={wixSiteId}
-                      onChange={e => setWixSiteId(e.target.value)}
-                      placeholder="Site ID"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    {wixError && <p className="text-xs text-red-600">{wixError}</p>}
-                    <button
-                      onClick={handleConnectWix}
-                      disabled={wixLoading}
-                      className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white text-sm font-medium py-2 rounded-lg transition-colors"
-                    >
-                      {wixLoading ? 'Connecting...' : 'Connect Wix'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {/* ShipStation */}
               <div className="border border-gray-200 rounded-xl p-5">
                 <div className="flex items-center justify-between mb-4">
@@ -459,12 +394,6 @@ export default function OnboardingPage() {
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <CheckCircle size={14} className="text-green-500 shrink-0" />
                     {workers.length} worker{workers.length !== 1 ? 's' : ''}: {workers.map(w => w.name).join(', ')}
-                  </div>
-                )}
-                {integrations.wix && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <CheckCircle size={14} className="text-green-500 shrink-0" />
-                    Wix connected
                   </div>
                 )}
                 {integrations.shipstation && (

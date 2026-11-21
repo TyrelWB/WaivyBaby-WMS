@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { syncBundlesUsingSubProduct } from '@/lib/wix-inventory'
+import { syncBundlesUsingSubProduct } from '@/lib/bundle-inventory'
 import { pushStockToStripe } from '@/lib/stripe-inventory'
 
 export async function POST(req: NextRequest) {

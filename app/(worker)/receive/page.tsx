@@ -126,7 +126,7 @@ export default function ReceivePage() {
       status: done ? 'received' : newQty > 0 ? 'partial' : 'pending',
     }).eq('id', item.id)
 
-    // Update inventory and sync to Wix via API
+    // Update inventory via API
     await fetch(`/api/products/${item.product_id}/adjust`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
