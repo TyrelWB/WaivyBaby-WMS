@@ -1,5 +1,5 @@
 import { createAdminClient } from './supabase/admin'
-import { syncInventoryToWix, syncBundlesUsingSubProduct } from './wix-inventory'
+import { syncBundlesUsingSubProduct } from './wix-inventory'
 import sql from './db'
 
 export type MovementType = 'receive' | 'reserve' | 'release' | 'ship' | 'adjust' | 'damage' | 'return' | 'cancel'
@@ -97,7 +97,7 @@ export async function recordInventoryMovement(params: {
   })
 
   if (syncToWix) {
-    syncInventoryToWix(productId, orgId).catch(() => {})
+    // Wix storefront retired — only recalculate local bundle stock, no outbound push.
     syncBundlesUsingSubProduct(productId, orgId).catch(() => {})
   }
 

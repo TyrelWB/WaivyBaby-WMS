@@ -139,8 +139,6 @@ async function refreshBundleInventory(productId: string, orgId: string): Promise
     SELECT ${productId}, ${orgId}, ${warehouseId}, ${qty}, ${qty}, 0, 0, 0
     WHERE NOT EXISTS (SELECT 1 FROM updated)
   `
-
-  syncInventoryToWix(productId, orgId).catch(() => {})
 }
 
 export async function syncBundlesUsingSubProduct(subProductId: string, orgId: string): Promise<void> {
