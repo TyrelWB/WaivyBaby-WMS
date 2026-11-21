@@ -11,29 +11,23 @@ type IntegrationStatus = {
   is_enabled: boolean
 } | null
 
-type Status = { shipstation: IntegrationStatus; needsMigration?: boolean }
-
-const CARRIERS = [
-  { value: '', label: 'Not set' },
-  { value: 'stamps_com', label: 'Stamps.com (USPS)' },
-  { value: 'ups', label: 'UPS' },
-  { value: 'fedex', label: 'FedEx' },
-  { value: 'usps', label: 'USPS' },
-  { value: 'dhl_express', label: 'DHL Express' },
-  { value: 'canada_post', label: 'Canada Post' },
-]
+type Status = { shippo: IntegrationStatus; needsMigration?: boolean }
 
 export default function IntegrationsPage() {
-  const [status, setStatus] = useState<Status>({ shipstation: null })
+  const [status, setStatus] = useState<Status>({ shippo: null })
   const [loading, setLoading] = useState(true)
 
-  // ShipStation form
-  const [ssForm, setSsForm] = useState({ api_key: '', api_secret: '', default_carrier: '', default_service: '' })
-  const [ssShowKey, setSsShowKey] = useState(false)
-  const [ssShowSecret, setSsShowSecret] = useState(false)
-  const [ssSaving, setSsSaving] = useState(false)
-  const [ssTesting, setSsTesting] = useState(false)
-  const [ssTestResult, setSsTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
+  // Shippo form
+  const [shippoForm, setShippoForm] = useState({
+    api_key: '',
+    ship_from_name: '', ship_from_street1: '', ship_from_street2: '',
+    ship_from_city: '', ship_from_state: '', ship_from_zip: '', ship_from_country: 'US',
+    ship_from_phone: '', ship_from_email: '',
+  })
+  const [shippoShowKey, setShippoShowKey] = useState(false)
+  const [shippoSaving, setShippoSaving] = useState(false)
+  const [shippoTesting, setShippoTesting] = useState(false)
+  const [shippoTestResult, setShippoTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
 
   // Stripe
   const [stripeSyncing, setStripeSyncing] = useState(false)
@@ -52,40 +46,45 @@ export default function IntegrationsPage() {
 
   useEffect(() => { loadStatus() }, [])
 
-  async function saveShipStation() {
-    if (!ssForm.api_key && !ssForm.api_secret && !ssForm.default_carrier && !ssForm.default_service) {
+  async function saveShippo() {
+    if (!Object.values(shippoForm).some(v => v.trim())) {
       toast.error('Enter at least one field to save')
       return
     }
-    setSsSaving(true)
-    setSsTestResult(null)
+    setShippoSaving(true)
+    setShippoTestResult(null)
     const res = await fetch('/api/integrations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'shipstation', credentials: ssForm }),
+      body: JSON.stringify({ provider: 'shippo', credentials: shippoForm }),
     })
     if (res.ok) {
-      toast.success('ShipStation credentials saved')
-      setSsForm({ api_key: '', api_secret: '', default_carrier: '', default_service: '' })
+      toast.success('Shippo credentials saved')
+      setShippoForm({
+        api_key: '',
+        ship_from_name: '', ship_from_street1: '', ship_from_street2: '',
+        ship_from_city: '', ship_from_state: '', ship_from_zip: '', ship_from_country: 'US',
+        ship_from_phone: '', ship_from_email: '',
+      })
       await loadStatus()
     } else {
       const d = await res.json()
       toast.error(d.error || 'Save failed')
     }
-    setSsSaving(false)
+    setShippoSaving(false)
   }
 
-  async function testShipStation() {
-    setSsTesting(true)
-    setSsTestResult(null)
+  async function testShippo() {
+    setShippoTesting(true)
+    setShippoTestResult(null)
     const res = await fetch('/api/integrations/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'shipstation' }),
+      body: JSON.stringify({ provider: 'shippo' }),
     })
     const d = await res.json()
-    setSsTestResult(d)
-    setSsTesting(false)
+    setShippoTestResult(d)
+    setShippoTesting(false)
   }
 
   async function recalculateBundles() {
@@ -136,7 +135,7 @@ export default function IntegrationsPage() {
     )
   }
 
-  const ssConfigured = status.shipstation?.configured
+  const shippoConfigured = status.shippo?.configured
 
   return (
     <div className="p-6 max-w-3xl space-y-6">
@@ -145,126 +144,95 @@ export default function IntegrationsPage() {
         <p className="text-sm text-gray-500 mt-0.5">Connect third-party services to sync orders and shipments</p>
       </div>
 
-      {/* ShipStation */}
+      {/* Shippo */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#4A90D9] rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-[#5A31F4] rounded-lg flex items-center justify-center">
               <Truck size={20} className="text-white" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900">ShipStation</p>
-              <p className="text-xs text-gray-400">Create shipments and pull tracking numbers</p>
+              <p className="font-semibold text-gray-900">Shippo</p>
+              <p className="text-xs text-gray-400">Get rates, create shipping labels, and track packages</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {ssConfigured ? (
+            {shippoConfigured ? (
               <span className="flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
                 <CheckCircle size={11} /> Connected
               </span>
             ) : (
               <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">Not configured</span>
             )}
-            <a href="https://ship13.shipstation.com/settings/api" target="_blank" rel="noopener" className="text-xs text-cyan-500 hover:underline flex items-center gap-1">
-              Get API keys <ExternalLink size={11} />
+            <a href="https://apps.goshippo.com/settings/api" target="_blank" rel="noopener" className="text-xs text-cyan-500 hover:underline flex items-center gap-1">
+              Get API key <ExternalLink size={11} />
             </a>
           </div>
         </div>
 
         <div className="px-6 py-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                API Key {ssConfigured && !ssForm.api_key && <span className="text-green-600 font-normal">• Saved</span>}
-              </label>
-              <div className="relative">
-                <input
-                  type={ssShowKey ? 'text' : 'password'}
-                  value={ssForm.api_key}
-                  onChange={e => setSsForm(f => ({ ...f, api_key: e.target.value }))}
-                  placeholder={ssConfigured ? 'Leave blank to keep current' : 'Enter API key'}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                  autoComplete="off"
-                />
-                <button onClick={() => setSsShowKey(v => !v)} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
-                  {ssShowKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                API Secret {ssConfigured && !ssForm.api_secret && <span className="text-green-600 font-normal">• Saved</span>}
-              </label>
-              <div className="relative">
-                <input
-                  type={ssShowSecret ? 'text' : 'password'}
-                  value={ssForm.api_secret}
-                  onChange={e => setSsForm(f => ({ ...f, api_secret: e.target.value }))}
-                  placeholder={ssConfigured ? 'Leave blank to keep current' : 'Enter API secret'}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                  autoComplete="off"
-                />
-                <button onClick={() => setSsShowSecret(v => !v)} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
-                  {ssShowSecret ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Default Carrier</label>
-              <select
-                value={ssForm.default_carrier}
-                onChange={e => setSsForm(f => ({ ...f, default_carrier: e.target.value }))}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
-              >
-                {CARRIERS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
-              {ssConfigured && status.shipstation?.fields?.includes('default_carrier') && !ssForm.default_carrier && (
-                <p className="text-xs text-green-600 mt-1">• Using saved carrier</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Default Service Code</label>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              API Token {shippoConfigured && !shippoForm.api_key && <span className="text-green-600 font-normal">• Saved</span>}
+            </label>
+            <div className="relative">
               <input
-                value={ssForm.default_service}
-                onChange={e => setSsForm(f => ({ ...f, default_service: e.target.value }))}
-                placeholder={ssConfigured ? 'e.g. priority_mail' : 'e.g. ups_ground'}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                type={shippoShowKey ? 'text' : 'password'}
+                value={shippoForm.api_key}
+                onChange={e => setShippoForm(f => ({ ...f, api_key: e.target.value }))}
+                placeholder={shippoConfigured ? 'Leave blank to keep current' : 'shippo_live_...'}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm pr-9 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                autoComplete="off"
               />
+              <button onClick={() => setShippoShowKey(v => !v)} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
+                {shippoShowKey ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
             </div>
           </div>
 
-          {ssTestResult && (
-            <div className={`flex items-center gap-2 text-sm rounded-xl px-3 py-2 ${ssTestResult.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-              {ssTestResult.ok ? <CheckCircle size={14} /> : <XCircle size={14} />}
-              {ssTestResult.ok ? 'Connected to ShipStation successfully' : ssTestResult.error}
+          <div>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Ship-From Address</p>
+            <div className="grid grid-cols-2 gap-3">
+              <input value={shippoForm.ship_from_name} onChange={e => setShippoForm(f => ({ ...f, ship_from_name: e.target.value }))} placeholder="Warehouse name" className="col-span-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+              <input value={shippoForm.ship_from_street1} onChange={e => setShippoForm(f => ({ ...f, ship_from_street1: e.target.value }))} placeholder="Street address" className="col-span-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+              <input value={shippoForm.ship_from_street2} onChange={e => setShippoForm(f => ({ ...f, ship_from_street2: e.target.value }))} placeholder="Suite / Unit (optional)" className="col-span-2 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+              <input value={shippoForm.ship_from_city} onChange={e => setShippoForm(f => ({ ...f, ship_from_city: e.target.value }))} placeholder="City" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+              <input value={shippoForm.ship_from_state} onChange={e => setShippoForm(f => ({ ...f, ship_from_state: e.target.value }))} placeholder="State" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+              <input value={shippoForm.ship_from_zip} onChange={e => setShippoForm(f => ({ ...f, ship_from_zip: e.target.value }))} placeholder="ZIP" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+              <input value={shippoForm.ship_from_phone} onChange={e => setShippoForm(f => ({ ...f, ship_from_phone: e.target.value }))} placeholder="Phone" className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400" />
+            </div>
+            <p className="text-xs text-gray-400 mt-1.5">This is the return address printed on every label — set it once.</p>
+          </div>
+
+          {shippoTestResult && (
+            <div className={`flex items-center gap-2 text-sm rounded-xl px-3 py-2 ${shippoTestResult.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+              {shippoTestResult.ok ? <CheckCircle size={14} /> : <XCircle size={14} />}
+              {shippoTestResult.ok ? 'Connected to Shippo successfully' : shippoTestResult.error}
             </div>
           )}
 
           <div className="flex items-center gap-3 pt-1">
             <button
-              onClick={saveShipStation}
-              disabled={ssSaving}
+              onClick={saveShippo}
+              disabled={shippoSaving}
               className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
             >
-              {ssSaving ? <Loader2 size={14} className="animate-spin" /> : null}
-              {ssSaving ? 'Saving...' : 'Save Credentials'}
+              {shippoSaving ? <Loader2 size={14} className="animate-spin" /> : null}
+              {shippoSaving ? 'Saving...' : 'Save Credentials'}
             </button>
             <button
-              onClick={testShipStation}
-              disabled={ssTesting || !ssConfigured}
+              onClick={testShippo}
+              disabled={shippoTesting || !shippoConfigured}
               className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
             >
-              {ssTesting ? <Loader2 size={14} className="animate-spin" /> : null}
-              {ssTesting ? 'Testing...' : 'Test Connection'}
+              {shippoTesting ? <Loader2 size={14} className="animate-spin" /> : null}
+              {shippoTesting ? 'Testing...' : 'Test Connection'}
             </button>
           </div>
 
           <div className="pt-2 border-t border-gray-100">
             <p className="text-xs text-gray-400">
-              Once connected, use the <span className="font-medium text-gray-600">Push to ShipStation</span> button on any packed order to send it for label creation.
+              Once connected, use <span className="font-medium text-gray-600">Get Rates</span> on any packed order to compare carrier prices and create a label.
             </p>
           </div>
         </div>

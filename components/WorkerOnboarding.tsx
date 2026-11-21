@@ -56,7 +56,7 @@ const ROLE_CONFIG: Record<Props['role'], RoleConfig> = {
     steps: [
       '🎯 Get an order — Tap one from the Incoming Orders list once it\'s packed.',
       '📍 Find the boxes — The screen shows the rack where the packed boxes are waiting.',
-      '🏷️ Print the shipping label — Use the label panel to get rates and create a label via ShipStation.',
+      '🏷️ Print the shipping label — Use the label panel to get rates and create a label via Shippo.',
       '✅ Confirm shipped — Once the label is on and the package is with the carrier, tap Confirm Shipped.',
     ],
     numberColor: 'bg-orange-600 text-white',

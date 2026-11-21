@@ -16,7 +16,7 @@ type Worker = {
 }
 
 type IntegrationStatus = {
-  shipstation: boolean
+  shippo: boolean
 }
 
 const TOTAL_STEPS = 4
@@ -37,11 +37,10 @@ export default function OnboardingPage() {
   const [workers, setWorkers] = useState<Worker[]>([])
   const [workerError, setWorkerError] = useState('')
 
-  const [ssApiKey, setSsApiKey] = useState('')
-  const [ssApiSecret, setSsApiSecret] = useState('')
-  const [integrations, setIntegrations] = useState<IntegrationStatus>({ shipstation: false })
-  const [ssLoading, setSsLoading] = useState(false)
-  const [ssError, setSsError] = useState('')
+  const [shippoApiKey, setShippoApiKey] = useState('')
+  const [integrations, setIntegrations] = useState<IntegrationStatus>({ shippo: false })
+  const [shippoLoading, setShippoLoading] = useState(false)
+  const [shippoError, setShippoError] = useState('')
 
   useEffect(() => {
     async function loadInitial() {
@@ -90,25 +89,25 @@ export default function OnboardingPage() {
     setWorkers(prev => prev.filter((_, i) => i !== index))
   }
 
-  async function handleConnectShipStation() {
-    setSsError('')
-    if (!ssApiKey.trim() || !ssApiSecret.trim()) { setSsError('Both fields are required.'); return }
-    setSsLoading(true)
+  async function handleConnectShippo() {
+    setShippoError('')
+    if (!shippoApiKey.trim()) { setShippoError('API token is required.'); return }
+    setShippoLoading(true)
     try {
       const res = await fetch('/api/integrations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: 'shipstation', credentials: { api_key: ssApiKey.trim(), api_secret: ssApiSecret.trim() } }),
+        body: JSON.stringify({ provider: 'shippo', credentials: { api_key: shippoApiKey.trim() } }),
       })
-      if (!res.ok) { const d = await res.json(); setSsError(d?.error || 'Connection failed.') }
-      else setIntegrations(prev => ({ ...prev, shipstation: true }))
+      if (!res.ok) { const d = await res.json(); setShippoError(d?.error || 'Connection failed.') }
+      else setIntegrations(prev => ({ ...prev, shippo: true }))
     } catch {
-      setSsError('Connection failed.')
+      setShippoError('Connection failed.')
     }
-    setSsLoading(false)
+    setShippoLoading(false)
   }
 
-  const connectedCount = [integrations.shipstation].filter(Boolean).length
+  const connectedCount = [integrations.shippo].filter(Boolean).length
 
   const stepMeta = [
     { label: 'Welcome', icon: Warehouse },
@@ -307,44 +306,38 @@ export default function OnboardingPage() {
             </div>
 
             <div className="space-y-5">
-              {/* ShipStation */}
+              {/* Shippo */}
               <div className="border border-gray-200 rounded-xl p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Link2 size={16} className="text-gray-500" />
-                    <span className="font-semibold text-gray-900 text-sm">ShipStation</span>
+                    <span className="font-semibold text-gray-900 text-sm">Shippo</span>
                   </div>
-                  {integrations.shipstation && (
+                  {integrations.shippo && (
                     <div className="flex items-center gap-1.5 text-green-600">
                       <CheckCircle size={16} />
                       <span className="text-xs font-medium">Connected</span>
                     </div>
                   )}
                 </div>
-                {!integrations.shipstation && (
+                {!integrations.shippo && (
                   <div className="space-y-3">
                     <input
                       type="text"
-                      value={ssApiKey}
-                      onChange={e => setSsApiKey(e.target.value)}
-                      placeholder="API Key"
+                      value={shippoApiKey}
+                      onChange={e => setShippoApiKey(e.target.value)}
+                      placeholder="API Token"
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                    <input
-                      type="password"
-                      value={ssApiSecret}
-                      onChange={e => setSsApiSecret(e.target.value)}
-                      placeholder="API Secret"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    {ssError && <p className="text-xs text-red-600">{ssError}</p>}
+                    {shippoError && <p className="text-xs text-red-600">{shippoError}</p>}
                     <button
-                      onClick={handleConnectShipStation}
-                      disabled={ssLoading}
+                      onClick={handleConnectShippo}
+                      disabled={shippoLoading}
                       className="w-full bg-gray-900 hover:bg-gray-800 disabled:opacity-60 text-white text-sm font-medium py-2 rounded-lg transition-colors"
                     >
-                      {ssLoading ? 'Connecting...' : 'Connect ShipStation'}
+                      {shippoLoading ? 'Connecting...' : 'Connect Shippo'}
                     </button>
+                    <p className="text-xs text-gray-400">You can set the ship-from address later in Settings → Integrations.</p>
                   </div>
                 )}
               </div>
@@ -396,10 +389,10 @@ export default function OnboardingPage() {
                     {workers.length} worker{workers.length !== 1 ? 's' : ''}: {workers.map(w => w.name).join(', ')}
                   </div>
                 )}
-                {integrations.shipstation && (
+                {integrations.shippo && (
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <CheckCircle size={14} className="text-green-500 shrink-0" />
-                    ShipStation connected
+                    Shippo connected
                   </div>
                 )}
               </div>

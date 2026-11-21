@@ -57,8 +57,8 @@ export default function ShipPage() {
 
   const [showOnboarding, setShowOnboarding] = useState(false)
 
-  // ShipStation state
-  const [ssConfigured, setSsConfigured] = useState(false)
+  // Shippo state
+  const [shippoConfigured, setShippoConfigured] = useState(false)
   const [weightOz, setWeightOz] = useState('')
   const [rates, setRates] = useState<any[] | null>(null)
   const [selectedRate, setSelectedRate] = useState<any | null>(null)
@@ -79,7 +79,7 @@ export default function ShipPage() {
       })
     fetch('/api/integrations')
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.shipstation?.configured) setSsConfigured(true) })
+      .then(data => { if (data?.shippo?.configured) setShippoConfigured(true) })
       .catch(() => {})
   }, [])
 
@@ -135,7 +135,7 @@ export default function ShipPage() {
     setRates(null)
     setSelectedRate(null)
     try {
-      const res = await fetch('/api/integrations/shipstation/rates', {
+      const res = await fetch('/api/integrations/shippo/rates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId: order.id, weightOz: parseFloat(weightOz) }),
@@ -158,10 +158,10 @@ export default function ShipPage() {
     if (!order || !selectedRate) return
     setCreatingLabel(true)
     try {
-      const res = await fetch('/api/integrations/shipstation/label', {
+      const res = await fetch('/api/integrations/shippo/label', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: order.id, carrierCode: selectedRate.carrierCode, serviceCode: selectedRate.serviceCode }),
+        body: JSON.stringify({ orderId: order.id, carrierCode: selectedRate.carrierCode, serviceCode: selectedRate.serviceCode, rateId: selectedRate.rateId }),
       })
       const data = await res.json()
       if (res.ok && data.labelUrl) {
@@ -465,8 +465,8 @@ export default function ShipPage() {
               {/* Right col: carrier + confirm */}
               <div className="lg:col-span-2 space-y-4">
 
-                {/* ShipStation Label Card */}
-                {ssConfigured && (
+                {/* Shippo Label Card */}
+                {shippoConfigured && (
                   <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
                     <div className="flex items-center gap-2">
                       <Tag size={15} className="text-gray-400" />
@@ -524,7 +524,7 @@ export default function ShipPage() {
 
                         {/* Rate list */}
                         {rates && rates.length === 0 && (
-                          <p className="text-xs text-red-500">No rates returned. Check ShipStation configuration.</p>
+                          <p className="text-xs text-red-500">No rates returned. Check Shippo configuration.</p>
                         )}
                         {rates && rates.length > 0 && (
                           <div className="space-y-1.5">

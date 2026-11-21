@@ -26,17 +26,16 @@ export async function POST(req: Request) {
 
   const creds = integration.credentials
 
-  if (provider === 'shipstation') {
-    if (!creds.api_key || !creds.api_secret) {
-      return NextResponse.json({ ok: false, error: 'Missing API key or secret' })
+  if (provider === 'shippo') {
+    if (!creds.api_key) {
+      return NextResponse.json({ ok: false, error: 'Missing API key' })
     }
-    const auth = 'Basic ' + Buffer.from(`${creds.api_key}:${creds.api_secret}`).toString('base64')
     try {
-      const res = await fetch('https://ssapi.shipstation.com/carriers', {
-        headers: { 'Authorization': auth },
+      const res = await fetch('https://api.goshippo.com/carrier_accounts/', {
+        headers: { 'Authorization': `ShippoToken ${creds.api_key.trim()}` },
       })
       if (!res.ok) {
-        return NextResponse.json({ ok: false, error: `ShipStation responded ${res.status}` })
+        return NextResponse.json({ ok: false, error: `Shippo responded ${res.status}` })
       }
       return NextResponse.json({ ok: true })
     } catch (e: any) {

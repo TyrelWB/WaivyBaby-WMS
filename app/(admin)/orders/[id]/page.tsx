@@ -81,10 +81,8 @@ export default function OrderDetailPage() {
   const [showSplit, setShowSplit] = useState(false)
   const [splitWorker, setSplitWorker] = useState('')
   const [addressForm, setAddressForm] = useState({ shipping_name: '', shipping_address_1: '', shipping_address_2: '', shipping_city: '', shipping_state: '', shipping_zip: '', shipping_country: 'US', shipping_phone: '' })
-  const [ssConfigured, setSsConfigured] = useState(false)
-  const [ssOrderInt, setSsOrderInt] = useState<{ external_id: string | null; tracking_number: string | null; carrier: string | null; label_url: string | null } | null>(null)
-  const [ssPushing, setSsPushing] = useState(false)
-  const [ssFetchingTracking, setSsFetchingTracking] = useState(false)
+  const [shippoConfigured, setShippoConfigured] = useState(false)
+  const [shippoOrderInt, setShippoOrderInt] = useState<{ external_id: string | null; tracking_number: string | null; carrier: string | null; label_url: string | null } | null>(null)
   const [weightOz, setWeightOz] = useState('')
   const [rates, setRates] = useState<any[] | null>(null)
   const [selectedRate, setSelectedRate] = useState<any | null>(null)
@@ -94,13 +92,13 @@ export default function OrderDetailPage() {
   async function fetchAll() {
     if (!orgId) { setLoading(false); return }
 
-    const [{ data: orderData }, { data: itemData }, { data: workerData }, { data: productData }, { data: ssIntData }, { data: ssOrderIntData }] = await Promise.all([
+    const [{ data: orderData }, { data: itemData }, { data: workerData }, { data: productData }, { data: shippoIntData }, { data: shippoOrderIntData }] = await Promise.all([
       supabase.from('orders').select('*, picker:workers!assigned_picker_id(id, name), packer:workers!assigned_packer_id(id, name)').eq('id', id).single(),
       supabase.from('order_items').select('*, products(name, sku, image_url, inventory(bin:bins(location_code)))').eq('order_id', id).order('created_at'),
       supabase.from('workers').select('id, name, role').eq('org_id', orgId).eq('is_active', true).order('name'),
       supabase.from('products').select('id, name, sku').eq('org_id', orgId).order('name'),
-      supabase.from('integrations').select('id').eq('org_id', orgId).eq('provider', 'shipstation').maybeSingle(),
-      supabase.from('order_integrations').select('external_id, tracking_number, carrier, label_url').eq('order_id', id as string).eq('provider', 'shipstation').maybeSingle(),
+      supabase.from('integrations').select('id').eq('org_id', orgId).eq('provider', 'shippo').maybeSingle(),
+      supabase.from('order_integrations').select('external_id, tracking_number, carrier, label_url').eq('order_id', id as string).eq('provider', 'shippo').maybeSingle(),
     ])
 
     const o = orderData as unknown as Order
@@ -120,8 +118,8 @@ export default function OrderDetailPage() {
       shipping_country: o.shipping_country || 'US',
       shipping_phone: o.shipping_phone || '',
     })
-    setSsConfigured(!!ssIntData)
-    setSsOrderInt(ssOrderIntData ?? null)
+    setShippoConfigured(!!shippoIntData)
+    setShippoOrderInt(shippoOrderIntData ?? null)
     if (o?.weight_oz) setWeightOz(String(o.weight_oz))
     setLoading(false)
   }
@@ -202,7 +200,7 @@ export default function OrderDetailPage() {
     setFetchingRates(true)
     setRates(null)
     setSelectedRate(null)
-    const res = await fetch('/api/integrations/shipstation/rates', {
+    const res = await fetch('/api/integrations/shippo/rates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orderId: id }),
@@ -216,10 +214,10 @@ export default function OrderDetailPage() {
   async function createLabel() {
     if (!selectedRate) { toast.error('Select a rate first'); return }
     setCreatingLabel(true)
-    const res = await fetch('/api/integrations/shipstation/label', {
+    const res = await fetch('/api/integrations/shippo/label', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: id, carrierCode: selectedRate.carrierCode, serviceCode: selectedRate.serviceCode }),
+      body: JSON.stringify({ orderId: id, carrierCode: selectedRate.carrierCode, serviceCode: selectedRate.serviceCode, rateId: selectedRate.rateId }),
     })
     const data = await res.json()
     setCreatingLabel(false)
@@ -227,38 +225,6 @@ export default function OrderDetailPage() {
     toast.success(`Label created · ${data.tracking}`)
     setRates(null)
     setSelectedRate(null)
-    fetchAll()
-  }
-
-  async function pushToShipStation() {
-    setSsPushing(true)
-    const res = await fetch('/api/integrations/shipstation/push', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: id }),
-    })
-    const data = await res.json()
-    setSsPushing(false)
-    if (!res.ok) { toast.error(data.error || 'Push failed'); return }
-    toast.success(data.already_pushed ? 'Already in ShipStation' : 'Pushed to ShipStation')
-    fetchAll()
-  }
-
-  async function fetchTracking() {
-    setSsFetchingTracking(true)
-    const res = await fetch('/api/integrations/shipstation/tracking', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: id }),
-    })
-    const data = await res.json()
-    setSsFetchingTracking(false)
-    if (!res.ok) { toast.error(data.error || 'Failed to fetch tracking'); return }
-    if (data.tracking) {
-      toast.success(`Tracking: ${data.tracking}`)
-    } else {
-      toast.info(data.message || 'No tracking yet')
-    }
     fetchAll()
   }
 
@@ -579,23 +545,23 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* Shipping Label (ShipStation) */}
-          {ssConfigured && (
+          {/* Shipping Label (Shippo) */}
+          {shippoConfigured && (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
               <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2 text-sm">
                 <ExternalLink size={14} className="text-gray-400" /> Shipping Label
               </h3>
 
-              {ssOrderInt?.label_url ? (
+              {shippoOrderInt?.label_url ? (
                 <div className="space-y-2">
                   <div className="bg-green-50 border border-green-100 rounded-lg p-2.5 flex items-center justify-between">
                     <p className="text-xs font-medium text-green-700">Label Created</p>
-                    {ssOrderInt.carrier && <p className="text-xs text-gray-500 uppercase">{ssOrderInt.carrier}</p>}
+                    {shippoOrderInt.carrier && <p className="text-xs text-gray-500 uppercase">{shippoOrderInt.carrier}</p>}
                   </div>
-                  {ssOrderInt.tracking_number && (
-                    <p className="text-xs font-mono text-gray-600 bg-gray-50 rounded-lg px-3 py-2 break-all">{ssOrderInt.tracking_number}</p>
+                  {shippoOrderInt.tracking_number && (
+                    <p className="text-xs font-mono text-gray-600 bg-gray-50 rounded-lg px-3 py-2 break-all">{shippoOrderInt.tracking_number}</p>
                   )}
-                  <a href={ssOrderInt.label_url} target="_blank" rel="noopener" className="w-full flex items-center justify-center gap-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg py-2 hover:bg-blue-50 transition-colors">
+                  <a href={shippoOrderInt.label_url} target="_blank" rel="noopener" className="w-full flex items-center justify-center gap-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg py-2 hover:bg-blue-50 transition-colors">
                     <ExternalLink size={13} /> Download Label
                   </a>
                 </div>
