@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, Zap, Package, User, Plus, Trash2, AlertTriangle, Split, ExternalLink, RefreshCw, Printer, MapPin } from 'lucide-react'
+import { ArrowLeft, Zap, Package, User, Plus, Trash2, AlertTriangle, Split, ExternalLink, RefreshCw, Printer, MapPin, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminContext } from '../../admin-context'
 
@@ -88,6 +88,7 @@ export default function OrderDetailPage() {
   const [selectedRate, setSelectedRate] = useState<any | null>(null)
   const [fetchingRates, setFetchingRates] = useState(false)
   const [creatingLabel, setCreatingLabel] = useState(false)
+  const [markingShipped, setMarkingShipped] = useState(false)
 
   async function fetchAll() {
     if (!orgId) { setLoading(false); return }
@@ -226,6 +227,14 @@ export default function OrderDetailPage() {
     setRates(null)
     setSelectedRate(null)
     fetchAll()
+  }
+
+  async function markShippedManually() {
+    if (!order?.tracking_number) { toast.error('Enter a tracking number first'); return }
+    setMarkingShipped(true)
+    await updateOrder({ status: 'shipped', shipped_at: new Date().toISOString() })
+    toast.success('Order marked as shipped')
+    setMarkingShipped(false)
   }
 
   useEffect(() => { fetchAll() }, [orgId])
@@ -542,6 +551,21 @@ export default function OrderDetailPage() {
                   <input type="text" value={order.tracking_number || ''} onChange={e => updateOrder({ tracking_number: e.target.value || null })} placeholder="—" className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
+
+              {['shipped', 'complete'].includes(order.status) ? (
+                <div className="bg-green-50 border border-green-100 rounded-lg p-2.5 flex items-center gap-1.5">
+                  <CheckCircle size={14} className="text-green-600 shrink-0" />
+                  <p className="text-xs font-medium text-green-700">Shipped{order.tracking_number ? ` · ${order.tracking_number}` : ''}</p>
+                </div>
+              ) : (
+                <button
+                  onClick={markShippedManually}
+                  disabled={!order.tracking_number || markingShipped}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white py-2 rounded-lg text-sm font-semibold transition-colors"
+                >
+                  {markingShipped ? 'Marking...' : 'Mark as Shipped'}
+                </button>
+              )}
             </div>
           </div>
 
