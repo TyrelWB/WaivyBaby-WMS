@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Building2, LogOut, Save, AlertTriangle, PackagePlus, CheckCircle, Loader2 } from 'lucide-react'
+import { Building2, LogOut, Save, AlertTriangle, PackagePlus, CheckCircle, Loader2, KeyRound, UserPlus, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 
 type OrgSettings = {
@@ -37,8 +37,16 @@ export default function SettingsPage() {
   const [resetConfirm, setResetConfirm] = useState('')
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [clearOrdersConfirm, setClearOrdersConfirm] = useState('')
+  const [showClearOrdersConfirm, setShowClearOrdersConfirm] = useState(false)
+  const [clearingOrders, setClearingOrders] = useState(false)
   const [importingSubProducts, setImportingSubProducts] = useState(false)
   const [importResult, setImportResult] = useState<{ inserted: number; skipped: number } | null>(null)
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' })
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [newAdminForm, setNewAdminForm] = useState({ email: '', fullName: '' })
+  const [invitingAdmin, setInvitingAdmin] = useState(false)
+  const [createdAdmin, setCreatedAdmin] = useState<{ email: string; tempPassword: string } | null>(null)
 
   useEffect(() => { fetchSettings() }, [])
 
@@ -93,6 +101,55 @@ export default function SettingsPage() {
     setSaving(false)
   }
 
+  async function changePassword() {
+    if (!adminUser?.email) return
+    if (!passwordForm.current) { toast.error('Enter your current password'); return }
+    if (passwordForm.next.length < 6) { toast.error('New password must be at least 6 characters'); return }
+    if (passwordForm.next !== passwordForm.confirm) { toast.error('New passwords do not match'); return }
+
+    setChangingPassword(true)
+
+    // Confirm the current password is correct before allowing a change.
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: adminUser.email,
+      password: passwordForm.current,
+    })
+    if (verifyError) {
+      toast.error('Current password is incorrect')
+      setChangingPassword(false)
+      return
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: passwordForm.next })
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success('Password updated')
+      setPasswordForm({ current: '', next: '', confirm: '' })
+    }
+    setChangingPassword(false)
+  }
+
+  async function inviteAdmin() {
+    if (!newAdminForm.email.trim()) { toast.error('Email is required'); return }
+    setInvitingAdmin(true)
+    setCreatedAdmin(null)
+    const res = await fetch('/api/admin/invite-admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newAdminForm),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      toast.error(data.error || 'Failed to create admin')
+    } else {
+      setCreatedAdmin(data)
+      setNewAdminForm({ email: '', fullName: '' })
+      toast.success('Admin account created')
+    }
+    setInvitingAdmin(false)
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut()
     window.location.href = '/login'
@@ -111,6 +168,22 @@ export default function SettingsPage() {
       else toast.success(`Imported ${data.inserted} sub-products`)
     }
     setImportingSubProducts(false)
+  }
+
+  async function handleClearOrders() {
+    if (clearOrdersConfirm !== 'DELETE') { toast.error('Type DELETE to confirm'); return }
+    setClearingOrders(true)
+    const res = await fetch('/api/admin/clear-orders', { method: 'POST' })
+    const data = await res.json()
+    if (!res.ok) {
+      toast.error(data.error || 'Failed to clear orders')
+      setClearingOrders(false)
+      return
+    }
+    toast.success(`Deleted ${data.deleted} order${data.deleted === 1 ? '' : 's'}`)
+    setShowClearOrdersConfirm(false)
+    setClearOrdersConfirm('')
+    setClearingOrders(false)
   }
 
   async function handleReset() {
@@ -149,6 +222,109 @@ export default function SettingsPage() {
             <LogOut size={14} /> Sign Out
           </button>
         </div>
+      </div>
+
+      {/* Change Password */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4">
+        <div className="flex items-center gap-2 mb-4">
+          <KeyRound size={18} className="text-gray-400" />
+          <h2 className="font-semibold text-gray-900">Change Password</h2>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Current Password</label>
+            <input
+              type="password"
+              value={passwordForm.current}
+              onChange={e => setPasswordForm({ ...passwordForm, current: e.target.value })}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              autoComplete="current-password"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">New Password</label>
+            <input
+              type="password"
+              value={passwordForm.next}
+              onChange={e => setPasswordForm({ ...passwordForm, next: e.target.value })}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              placeholder="At least 6 characters"
+              autoComplete="new-password"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Confirm New Password</label>
+            <input
+              type="password"
+              value={passwordForm.confirm}
+              onChange={e => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+              onKeyDown={e => { if (e.key === 'Enter') changePassword() }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="flex justify-end">
+            <button onClick={changePassword} disabled={changingPassword} className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium">
+              {changingPassword ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+              {changingPassword ? 'Updating...' : 'Update Password'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Add Admin */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4">
+        <div className="flex items-center gap-2 mb-4">
+          <UserPlus size={18} className="text-gray-400" />
+          <h2 className="font-semibold text-gray-900">Add Admin</h2>
+        </div>
+
+        {createdAdmin ? (
+          <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-4 space-y-3">
+            <p className="text-sm text-cyan-900 font-medium">Account created for {createdAdmin.email}</p>
+            <p className="text-xs text-cyan-700">Share this temporary password with them — it won't be shown again. They should change it after signing in.</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-white border border-cyan-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-900">{createdAdmin.tempPassword}</code>
+              <button
+                onClick={() => { navigator.clipboard.writeText(createdAdmin.tempPassword); toast.success('Copied') }}
+                className="flex items-center gap-1.5 bg-cyan-500 hover:bg-cyan-600 text-white px-3 py-2 rounded-lg text-xs font-medium shrink-0"
+              >
+                <Copy size={12} /> Copy
+              </button>
+            </div>
+            <button onClick={() => setCreatedAdmin(null)} className="text-xs text-cyan-700 hover:text-cyan-900 font-medium">
+              Add another admin
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Email</label>
+              <input
+                type="email"
+                value={newAdminForm.email}
+                onChange={e => setNewAdminForm({ ...newAdminForm, email: e.target.value })}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                placeholder="name@company.com"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Full Name (optional)</label>
+              <input
+                value={newAdminForm.fullName}
+                onChange={e => setNewAdminForm({ ...newAdminForm, fullName: e.target.value })}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                placeholder="Jane Smith"
+              />
+            </div>
+            <div className="flex justify-end">
+              <button onClick={inviteAdmin} disabled={invitingAdmin} className="flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium">
+                {invitingAdmin ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                {invitingAdmin ? 'Creating...' : 'Create Admin'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Organization */}
@@ -259,6 +435,52 @@ export default function SettingsPage() {
           <h2 className="font-semibold text-red-600">Danger Zone</h2>
         </div>
         <p className="text-sm text-gray-500 mb-4">These actions are permanent and cannot be undone.</p>
+
+        <div className="p-4 border border-red-100 rounded-lg bg-red-50 space-y-3 mb-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-900">Clear all orders</p>
+              <p className="text-xs text-gray-500 mt-0.5">Deletes every order, regardless of status. Products, inventory, and workers are kept.</p>
+            </div>
+            {!showClearOrdersConfirm && (
+              <button
+                onClick={() => setShowClearOrdersConfirm(true)}
+                className="text-xs text-red-600 border border-red-300 hover:bg-red-100 rounded-xl px-3 py-2 transition-colors font-medium shrink-0"
+              >
+                Clear Orders
+              </button>
+            )}
+          </div>
+          {showClearOrdersConfirm && (
+            <div className="space-y-3 pt-1 border-t border-red-200">
+              <p className="text-xs font-medium text-red-700">Type <span className="font-mono font-bold">DELETE</span> to confirm:</p>
+              <input
+                value={clearOrdersConfirm}
+                onChange={e => setClearOrdersConfirm(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleClearOrders() }}
+                className="w-full border border-red-300 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400 font-mono"
+                placeholder="DELETE"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleClearOrders}
+                  disabled={clearingOrders || clearOrdersConfirm !== 'DELETE'}
+                  className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white py-2 rounded-xl text-sm font-medium transition-colors"
+                >
+                  {clearingOrders ? 'Deleting...' : 'Confirm Delete'}
+                </button>
+                <button
+                  onClick={() => { setShowClearOrdersConfirm(false); setClearOrdersConfirm('') }}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="p-4 border border-red-100 rounded-lg bg-red-50 space-y-3">
           <div className="flex items-start justify-between gap-4">
             <div>

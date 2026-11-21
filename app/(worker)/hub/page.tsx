@@ -1,18 +1,26 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ShoppingBasket, Package, Truck, Send, LogOut, Warehouse, ChevronDown } from 'lucide-react'
+import { ShoppingBasket, Package, Boxes, Send, LogOut, ChevronDown } from 'lucide-react'
 
 type WorkerSession = { workerId: string; name: string; role: string; orgId: string; warehouseId: string }
+
+const ROLE_LABELS: Record<string, string> = {
+  picker: 'Picker',
+  packer: 'Packer',
+  shipper: 'Shipper',
+  inventory: 'Inventory Control',
+  all: 'All Roles',
+}
 
 // Picking and packing are cross-visible to both roles: on the floor, whoever
 // finishes picking with nobody else around to pack often needs to pack it
 // themselves, so both roles need to be able to reach both task screens.
 const ALL_TASKS = [
-  { key: 'pick',    label: 'Picking',   description: 'Collect items for orders',     href: '/pick',    icon: ShoppingBasket, color: 'bg-blue-600 hover:bg-blue-500',   iconBg: 'bg-blue-700',   roles: ['picker', 'packer', 'all'] },
-  { key: 'pack',    label: 'Packing',   description: 'Pack orders into boxes',        href: '/pack',    icon: Package,        color: 'bg-purple-600 hover:bg-purple-500', iconBg: 'bg-purple-700', roles: ['picker', 'packer', 'all'] },
-  { key: 'ship',    label: 'Shipping',  description: 'Ship packed orders out',        href: '/ship',    icon: Send,           color: 'bg-orange-600 hover:bg-orange-500', iconBg: 'bg-orange-700', roles: ['shipper',  'all'] },
-  { key: 'receive', label: 'Receiving', description: 'Check in incoming shipments',   href: '/receive', icon: Truck,          color: 'bg-green-600 hover:bg-green-500',  iconBg: 'bg-green-700',  roles: ['receiver', 'all'] },
+  { key: 'pick',      label: 'Picking',           description: 'Collect items for orders',      href: '/pick',      icon: ShoppingBasket, color: 'bg-blue-600 hover:bg-blue-500',   iconBg: 'bg-blue-700',   roles: ['picker', 'packer', 'all'] },
+  { key: 'pack',      label: 'Packing',           description: 'Pack orders into boxes',         href: '/pack',      icon: Package,        color: 'bg-purple-600 hover:bg-purple-500', iconBg: 'bg-purple-700', roles: ['picker', 'packer', 'all'] },
+  { key: 'ship',      label: 'Shipping',          description: 'Ship packed orders out',         href: '/ship',      icon: Send,           color: 'bg-orange-600 hover:bg-orange-500', iconBg: 'bg-orange-700', roles: ['shipper',  'all'] },
+  { key: 'inventory', label: 'Inventory Control',  description: 'Receiving, stock, and locations', href: '/inventory-control', icon: Boxes,          color: 'bg-green-600 hover:bg-green-500',  iconBg: 'bg-green-700',  roles: ['inventory', 'all'] },
 ]
 
 const FOCUS_KEY = 'wms_worker_focus'
@@ -68,13 +76,11 @@ export default function WorkerHubPage() {
       {/* Header */}
       <div className="flex items-center justify-between px-8 py-4 border-b border-gray-800">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-gray-800 rounded-lg flex items-center justify-center">
-            <Warehouse size={18} className="text-gray-400" />
-          </div>
+          <img src="/logo.png" alt="Waivy WMS" className="w-9 h-9 rounded-full" />
           <div>
             <p className="font-bold text-white">{worker.name}</p>
-            <p className="text-xs text-gray-500 capitalize">
-              {isAllRole && focusedTask ? `${focusedTask.label} today` : worker.role}
+            <p className="text-xs text-gray-500">
+              {isAllRole && focusedTask ? `${focusedTask.label} today` : (ROLE_LABELS[worker.role] || worker.role)}
             </p>
           </div>
         </div>

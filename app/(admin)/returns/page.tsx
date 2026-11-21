@@ -77,7 +77,12 @@ export default function ReturnsPage() {
     if (filter === 'resolved') query = query.in('status', ['restocked', 'disposed', 'refunded'])
 
     const { data } = await query
-    setReturns(data as unknown as Return[] || [])
+    const base = (data as unknown as Return[]) || []
+    // products can come back null if an item's product_id is orphaned (deleted product, bad data, etc.)
+    setReturns(base.map(r => ({
+      ...r,
+      return_items: r.return_items.map(i => ({ ...i, products: i.products || { name: 'Unknown product', sku: '—' } })),
+    })))
     setLoading(false)
   }
 

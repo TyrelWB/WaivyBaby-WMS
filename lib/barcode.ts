@@ -1,3 +1,5 @@
+import type { createClient } from './supabase/client'
+
 export type BarcodeType = 'basket' | 'order' | 'box' | 'bin' | 'product' | 'unknown'
 
 export interface ParsedBarcode {
@@ -32,4 +34,29 @@ export function generateBoxBarcode(orderId: string, boxNumber: number) {
 
 export function generateBinBarcode(locationCode: string) {
   return `BIN-${locationCode.toUpperCase()}`
+}
+
+// SKU is the canonical, guaranteed-unique identifier and what Print Labels
+// always encodes, so check it first — that way anything the app printed
+// always resolves correctly, even if stale/leftover rows in
+// product_barcodes (real-world UPCs, or old seed data) happen to collide
+// with a SKU string that now belongs to a different product. Barcodes are
+// the fallback, for genuine external barcodes that don't match any SKU.
+export async function lookupProductIdByBarcode(
+  supabase: ReturnType<typeof createClient>,
+  raw: string
+): Promise<string | null> {
+  const { data: bySku } = await supabase
+    .from('products')
+    .select('id')
+    .eq('sku', raw)
+    .maybeSingle()
+  if (bySku) return bySku.id
+
+  const { data: byBarcode } = await supabase
+    .from('product_barcodes')
+    .select('product_id')
+    .eq('barcode', raw)
+    .maybeSingle()
+  return byBarcode?.product_id ?? null
 }

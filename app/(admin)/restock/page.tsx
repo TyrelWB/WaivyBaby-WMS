@@ -38,7 +38,7 @@ export default function RestockPage() {
     if (data.error) {
       toast.error(data.error)
     } else if (data.message) {
-      toast.error(data.message)
+      toast.info(data.message)
     } else {
       toast.success(`Scan complete — ${data.generated} new alerts, ${data.skipped} already open`)
       await load()

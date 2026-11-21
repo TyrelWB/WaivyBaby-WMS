@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { parseBarcode } from '@/lib/barcode'
+import { parseBarcode, lookupProductIdByBarcode } from '@/lib/barcode'
 import {
   CheckCircle, XCircle, Package, Truck, LogOut, ArrowLeft,
   Camera, Printer, Plus, Minus, X, Scan
@@ -96,18 +96,16 @@ export default function ReceivePage() {
   async function handleItemScan(parsed: ReturnType<typeof parseBarcode>) {
     if (!worker || !activeRecord) return
 
-    const { data: productBarcode } = await supabase
-      .from('product_barcodes').select('product_id')
-      .eq('barcode', parsed.raw).single()
+    const productId = await lookupProductIdByBarcode(supabase, parsed.raw)
 
-    if (!productBarcode) {
+    if (!productId) {
       playError()
       setLastScan({ result: 'error', message: `Unknown barcode: ${parsed.raw}` })
       await logScan(parsed.raw, 'unknown', 'receive', 'error', 'Barcode not found in system')
       return
     }
 
-    const item = items.find(i => i.product_id === productBarcode.product_id)
+    const item = items.find(i => i.product_id === productId)
     if (!item) {
       playError()
       setLastScan({ result: 'error', message: 'This item is not on this receiving record.' })
@@ -262,7 +260,7 @@ export default function ReceivePage() {
               <ArrowLeft size={18} className="text-gray-500" />
             </button>
           ) : (
-            <a href="/hub" className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            <a href="/inventory-control" className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
               <ArrowLeft size={18} className="text-gray-500" />
             </a>
           )}

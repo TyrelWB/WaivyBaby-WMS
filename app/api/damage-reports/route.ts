@@ -11,11 +11,11 @@ async function getOrgId(): Promise<string | null> {
     const { data } = await admin.from('admin_users').select('org_id').eq('id', user.id).single()
     return data?.org_id || null
   }
+  // Worker session cookie is a JSON blob, not a lookup token — parse it directly.
   const cookieStore = await cookies()
-  const sessionToken = cookieStore.get('wms_worker_session')?.value
-  if (sessionToken) {
-    const { data } = await admin.from('worker_sessions').select('org_id').eq('token', sessionToken).eq('is_active', true).single()
-    return data?.org_id || null
+  const raw = cookieStore.get('wms_worker_session')
+  if (raw) {
+    try { return JSON.parse(raw.value).orgId || null } catch { return null }
   }
   return null
 }

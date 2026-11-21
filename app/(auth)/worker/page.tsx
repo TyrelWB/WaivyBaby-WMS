@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Warehouse, Delete, Check } from 'lucide-react'
+import { Delete, Check } from 'lucide-react'
 import { toast } from 'sonner'
 
 const PAD = ['1','2','3','4','5','6','7','8','9','✓','0','⌫']
@@ -36,7 +36,8 @@ export default function WorkerPinPage() {
       const data = await res.json()
       const role = data.role
       if (role === 'packer') router.push('/pack')
-      else if (role === 'receiver') router.push('/receive')
+      else if (role === 'shipper') router.push('/ship')
+      else if (role === 'inventory') router.push('/inventory-control')
       else if (role === 'all') router.push('/hub')
       else router.push('/pick')
     } else {
@@ -50,9 +51,7 @@ export default function WorkerPinPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-950">
       <div className="w-full max-w-xs">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
-            <Warehouse size={20} className="text-white" />
-          </div>
+          <img src="/logo.png" alt="Waivy WMS" className="w-10 h-10 rounded-full" />
           <div>
             <p className="font-bold text-white text-lg leading-none">Waivy WMS</p>
             <p className="text-xs text-gray-500 leading-none mt-0.5">Worker Login</p>

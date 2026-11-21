@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Truck, X, Package, CheckCircle, Clock, ChevronDown, ChevronUp, Search } from 'lucide-react'
+import { Plus, Truck, X, Package, CheckCircle, Clock, ChevronDown, ChevronUp, Search, Scan } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminContext } from '../admin-context'
+import { lookupProductIdByBarcode } from '@/lib/barcode'
+import CameraScanner from '@/components/CameraScanner'
 
 type ReceivingRecord = {
   id: string
@@ -49,6 +51,14 @@ export default function ReceivingPage() {
   const [addingItemTo, setAddingItemTo] = useState<string | null>(null)
   const [itemForm, setItemForm] = useState({ sku: '', quantity_expected: '' })
   const [skuMatch, setSkuMatch] = useState<{ id: string; name: string; sku: string } | null>(null)
+  const [showScanner, setShowScanner] = useState<string | null>(null)
+  const skuInputRef = useRef<HTMLInputElement>(null)
+
+  // Keep the SKU field focused so a scan gun can add items back-to-back
+  // without clicking in between scans.
+  useEffect(() => {
+    if (addingItemTo) skuInputRef.current?.focus()
+  }, [addingItemTo])
 
   async function fetchRecords() {
     if (!orgId) { setLoading(false); return }
@@ -66,7 +76,12 @@ export default function ReceivingPage() {
     if (filter === 'complete') query = query.eq('status', 'complete')
 
     const { data } = await query
-    setRecords(data as unknown as ReceivingRecord[] || [])
+    const base = (data as unknown as ReceivingRecord[]) || []
+    // products can come back null if an item's product_id is orphaned (deleted product, bad data, etc.)
+    setRecords(base.map(r => ({
+      ...r,
+      receiving_items: r.receiving_items.map(i => ({ ...i, products: i.products || { name: 'Unknown product', sku: '—' } })),
+    })))
     setLoading(false)
   }
 
@@ -98,25 +113,50 @@ export default function ReceivingPage() {
     setSkuMatch(data || null)
   }
 
-  async function addItemToRecord(receivingId: string) {
-    if (!skuMatch) { toast.error('Enter a valid SKU first'); return }
-    const qty = parseInt(itemForm.quantity_expected)
+  async function addItemToRecord(receivingId: string, product?: { id: string; name: string; sku: string }, qtyOverride?: number) {
+    const match = product || skuMatch
+    if (!match) { toast.error('Enter a valid SKU first'); return }
+    const qty = qtyOverride ?? parseInt(itemForm.quantity_expected)
     if (isNaN(qty) || qty < 1) { toast.error('Enter a valid quantity'); return }
 
     const { error } = await supabase.from('receiving_items').insert({
       receiving_id: receivingId,
-      product_id: skuMatch.id,
+      product_id: match.id,
       quantity_expected: qty,
       quantity_received: 0,
       status: 'pending',
     })
 
     if (error) { toast.error(error.message); return }
-    toast.success(`Added ${skuMatch.name}`)
-    setAddingItemTo(null)
+    toast.success(`Added ${match.name}`)
     setItemForm({ sku: '', quantity_expected: '' })
     setSkuMatch(null)
     fetchRecords()
+  }
+
+  // A scan gun just types into the focused field and sends Enter — do an
+  // authoritative exact match instead of trusting the (possibly still
+  // in-flight) fuzzy skuMatch state. Defaults expected qty to 1 if blank,
+  // matching a "scan one unit per line" workflow.
+  async function handleSkuEnter(receivingId: string) {
+    const raw = itemForm.sku.trim()
+    if (!raw) return
+    const productId = await lookupProductIdByBarcode(supabase, raw)
+    if (!productId) { toast.error(`Unknown barcode: ${raw}`); return }
+    const { data: p } = await supabase.from('products').select('id, name, sku').eq('id', productId).single()
+    if (!p) { toast.error(`Unknown barcode: ${raw}`); return }
+    const qty = parseInt(itemForm.quantity_expected) || 1
+    await addItemToRecord(receivingId, p, qty)
+  }
+
+  async function handleBarcodeScan(receivingId: string, raw: string) {
+    setShowScanner(null)
+    const productId = await lookupProductIdByBarcode(supabase, raw.trim())
+    if (!productId) { toast.error(`Unknown barcode: ${raw.trim()}`); return }
+    const { data: p } = await supabase.from('products').select('id, name, sku').eq('id', productId).single()
+    if (!p) { toast.error(`Unknown barcode: ${raw.trim()}`); return }
+    const qty = parseInt(itemForm.quantity_expected) || 1
+    await addItemToRecord(receivingId, p, qty)
   }
 
   async function removeItemFromRecord(itemId: string) {
@@ -319,11 +359,12 @@ export default function ReceivingPage() {
                           <div className="flex items-center gap-2">
                             <div className="relative flex-1">
                               <input
+                                ref={skuInputRef}
                                 value={itemForm.sku}
                                 onChange={e => { setItemForm(f => ({ ...f, sku: e.target.value })); lookupSku(e.target.value) }}
+                                onKeyDown={e => { if (e.key === 'Enter') handleSkuEnter(record.id) }}
                                 className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                                placeholder="SKU"
-                                autoFocus
+                                placeholder="Scan or type SKU"
                               />
                               {skuMatch && <p className="absolute left-0 -bottom-5 text-xs text-green-600">{skuMatch.name}</p>}
                             </div>
@@ -331,10 +372,12 @@ export default function ReceivingPage() {
                               type="number"
                               value={itemForm.quantity_expected}
                               onChange={e => setItemForm(f => ({ ...f, quantity_expected: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') handleSkuEnter(record.id) }}
                               className="w-24 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                              placeholder="Qty"
+                              placeholder="Qty (1)"
                               min="1"
                             />
+                            <button onClick={() => setShowScanner(record.id)} className="flex items-center justify-center bg-cyan-600 hover:bg-cyan-700 text-white p-1.5 rounded-lg" aria-label="Scan product barcode"><Scan size={14} /></button>
                             <button onClick={() => addItemToRecord(record.id)} className="bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium">Add</button>
                             <button onClick={() => { setAddingItemTo(null); setItemForm({ sku: '', quantity_expected: '' }); setSkuMatch(null) }} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                           </div>
@@ -351,6 +394,10 @@ export default function ReceivingPage() {
             )
           })}
         </div>
+      )}
+
+      {showScanner && (
+        <CameraScanner onScan={(raw) => handleBarcodeScan(showScanner, raw)} onClose={() => setShowScanner(null)} />
       )}
     </div>
   )

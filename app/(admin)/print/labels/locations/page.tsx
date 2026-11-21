@@ -60,7 +60,7 @@ export default function PrintLocationLabelsPage() {
   }, [orgId])
 
   const grouped: GroupedBins[] = bins.reduce<GroupedBins[]>((acc, bin) => {
-    const zoneName = bin.zones?.name ?? 'No Zone'
+    const zoneName = bin.zones?.name ?? 'No Overstock Location'
     const zoneCode = bin.zones?.code ?? ''
     const existing = acc.find(g => g.zoneName === zoneName)
     if (existing) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { parseBarcode } from '@/lib/barcode'
+import { parseBarcode, lookupProductIdByBarcode } from '@/lib/barcode'
 import { playSuccess, playError } from '@/lib/feedback'
 import { writeAudit } from '@/lib/audit'
 import {
@@ -266,13 +266,9 @@ export default function BatchPickPage() {
   async function handleItemScan(parsed: ReturnType<typeof parseBarcode>) {
     if (!worker) return
 
-    const { data: productBarcode } = await supabase
-      .from('product_barcodes')
-      .select('product_id')
-      .eq('barcode', parsed.raw)
-      .single()
+    const productId = await lookupProductIdByBarcode(supabase, parsed.raw)
 
-    if (!productBarcode) {
+    if (!productId) {
       playError()
       setLastScan({ result: 'error', message: `Barcode not recognized: ${parsed.raw}` })
       return
@@ -280,11 +276,11 @@ export default function BatchPickPage() {
 
     // Find the item across all orders (pick from oldest order first — first match)
     const item = remainingItems.find(
-      i => i.product_id === productBarcode.product_id && i.quantity_picked < i.quantity_ordered
+      i => i.product_id === productId && i.quantity_picked < i.quantity_ordered
     )
 
     if (!item) {
-      const anyItem = items.find(i => i.product_id === productBarcode.product_id)
+      const anyItem = items.find(i => i.product_id === productId)
       if (anyItem) {
         playError()
         setLastScan({ result: 'warning', message: `${anyItem.products.name} is already fully picked across all orders.` })

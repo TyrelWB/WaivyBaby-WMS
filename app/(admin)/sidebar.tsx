@@ -7,8 +7,8 @@ import { createClient } from '@/lib/supabase/client'
 import {
   LayoutDashboard, Package, ShoppingCart, Users,
   BarChart2, Settings, LogOut, Truck,
-  RotateCcw, ShoppingBasket, Link2, FileText,
-  MapPin, Warehouse, ClipboardList, AlertTriangle, Zap, CalendarCheck, Sparkles
+  RotateCcw, Link2, FileText,
+  MapPin, ClipboardList, AlertTriangle, Zap, CalendarCheck, Sparkles, Printer
 } from 'lucide-react'
 
 const groups = [
@@ -28,8 +28,8 @@ const groups = [
     { href: '/inventory', icon: Package, label: 'Inventory' },
     { href: '/restock', icon: AlertTriangle, label: 'Restock Alerts' },
     { href: '/shopping-list', icon: ClipboardList, label: 'Shopping List' },
-    { href: '/locations', icon: MapPin, label: 'Locations' },
-    { href: '/baskets', icon: ShoppingBasket, label: 'Baskets' },
+    { href: '/locations', icon: MapPin, label: 'Locations & Overstock' },
+    { href: '/print/labels', icon: Printer, label: 'Print Labels' },
   ],
   [
     { href: '/workers', icon: Users, label: 'Workers' },
@@ -134,9 +134,7 @@ export default function AdminSidebar({ email }: { email: string }) {
     <aside className="w-[60px] bg-[#111318] flex flex-col min-h-screen shrink-0 border-r border-white/5">
       {/* Logo */}
       <div className="flex items-center justify-center h-14 border-b border-white/5">
-        <div className="w-8 h-8 bg-cyan-500 rounded-lg flex items-center justify-center">
-          <Warehouse size={15} className="text-white" />
-        </div>
+        <img src="/logo.png" alt="Waivy WMS" className="w-8 h-8 rounded-full" />
       </div>
 
       {/* Nav */}

@@ -112,8 +112,14 @@ export default function TrackingPage() {
       .order('created_at', { ascending: false })
       .limit(20)
 
-    setResults((data as unknown as OrderResult[]) || [])
-    if (data?.length === 1) setSelected(data[0] as unknown as OrderResult)
+    const base = (data as unknown as OrderResult[]) || []
+    // products can come back null if an item's product_id is orphaned (deleted product, bad data, etc.)
+    const sanitized = base.map(o => ({
+      ...o,
+      order_items: o.order_items.map(i => ({ ...i, products: i.products || { name: 'Unknown product', sku: '—', image_url: null } })),
+    }))
+    setResults(sanitized)
+    if (sanitized.length === 1) setSelected(sanitized[0])
     setLoading(false)
   }
 

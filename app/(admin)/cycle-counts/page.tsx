@@ -73,7 +73,12 @@ export default function CycleCountsPage() {
     const { data: countData } = await query
     const { data: workerData } = await supabase.from('workers').select('id, name').eq('org_id', orgId).eq('is_active', true).order('name')
 
-    setCounts(countData as unknown as CycleCount[] || [])
+    const baseCounts = (countData as unknown as CycleCount[]) || []
+    // products can come back null if an item's product_id is orphaned (deleted product, bad data, etc.)
+    setCounts(baseCounts.map(c => ({
+      ...c,
+      cycle_count_items: c.cycle_count_items.map(i => ({ ...i, products: i.products || { name: 'Unknown product', sku: '—' } })),
+    })))
     setWorkers(workerData || [])
     setLoading(false)
   }

@@ -45,7 +45,7 @@ export default function PrintLabelsPage() {
   const [search, setSearch] = useState('')
   const [labelItems, setLabelItems] = useState<LabelItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'all' | 'sub'>('sub')
+  const [filter, setFilter] = useState<'all' | 'sub'>('all')
 
   useEffect(() => {
     if (!orgId) return
@@ -152,11 +152,11 @@ export default function PrintLabelsPage() {
                 />
               </div>
               <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-                <button onClick={() => setFilter('sub')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filter === 'sub' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
-                  Sub-Products
-                </button>
                 <button onClick={() => setFilter('all')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filter === 'all' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
                   All Products
+                </button>
+                <button onClick={() => setFilter('sub')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filter === 'sub' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                  Sub-Products
                 </button>
               </div>
               <button onClick={selectAll} className="text-xs text-blue-600 hover:text-blue-700 font-medium whitespace-nowrap">Select all</button>
@@ -234,7 +234,6 @@ export default function PrintLabelsPage() {
                     <div className="flex flex-col items-center gap-1">
                       <Barcode value={product.sku} className="w-full" />
                       <p className="text-xs font-bold font-mono tracking-wider text-gray-900">{product.sku}</p>
-                      <p className="text-xs text-gray-600 text-center leading-tight line-clamp-2">{product.name}</p>
                     </div>
                     <p className="text-xs text-gray-400 text-center mt-1.5">{copies} cop{copies !== 1 ? 'ies' : 'y'}</p>
                   </div>
@@ -263,7 +262,6 @@ export default function PrintLabelsPage() {
             }}>
               <BarcodeStatic value={product.sku} />
               <p style={{ fontSize: '9pt', fontWeight: 'bold', fontFamily: 'monospace', margin: '2px 0 1px', letterSpacing: '0.05em' }}>{product.sku}</p>
-              <p style={{ fontSize: '7pt', fontFamily: 'sans-serif', margin: 0, textAlign: 'center', lineHeight: 1.2, maxWidth: '100%', overflow: 'hidden' }}>{product.name}</p>
             </div>
           ))}
         </div>

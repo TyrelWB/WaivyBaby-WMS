@@ -115,7 +115,12 @@ function ShippingReport({ orgId }: { orgId: string }) {
       .gte('updated_at', `${date}T00:00:00`)
       .lte('updated_at', `${date}T23:59:59`)
       .order('updated_at', { ascending: true })
-    setOrders((data as unknown as ShippingOrder[]) || [])
+    const base = (data as unknown as ShippingOrder[]) || []
+    // products can come back null if an item's product_id is orphaned (deleted product, bad data, etc.)
+    setOrders(base.map(o => ({
+      ...o,
+      order_items: o.order_items.map(i => ({ ...i, products: i.products || { name: 'Unknown product', sku: '—' } })),
+    })))
     setLoading(false)
   }
 

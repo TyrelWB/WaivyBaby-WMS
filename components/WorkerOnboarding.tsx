@@ -4,9 +4,17 @@ import { useEffect } from 'react'
 
 type Props = {
   workerId: string
-  role: 'picker' | 'packer' | 'shipper' | 'receiver' | 'all'
+  role: 'picker' | 'packer' | 'shipper' | 'inventory' | 'all'
   focusTask?: string | null
   onDismiss: () => void
+}
+
+const ROLE_BADGE_LABELS: Record<Props['role'], string> = {
+  picker: 'Picker',
+  packer: 'Packer',
+  shipper: 'Shipper',
+  inventory: 'Inventory Control',
+  all: 'All roles',
 }
 
 type RoleConfig = {
@@ -55,13 +63,14 @@ const ROLE_CONFIG: Record<Props['role'], RoleConfig> = {
     buttonColor: 'bg-orange-600 hover:bg-orange-700',
     badgeColor: 'bg-orange-100 text-orange-700',
   },
-  receiver: {
-    title: 'Welcome, Receiver! Here\'s how it works.',
+  inventory: {
+    title: 'Welcome to Inventory Control! Here\'s how it works.',
     steps: [
-      '📋 Select a receiving record — Choose the incoming shipment you\'re checking in.',
-      '🔍 Scan each item — Scan item barcodes as you count them. The app tracks expected vs received.',
-      '🏷️ Print labels if needed — You can print bin labels for new inventory directly from the app.',
-      '✅ Inventory updates automatically — Received quantities are added to stock in real time.',
+      '📋 Receiving — Select an incoming shipment and scan items in. Stock updates automatically as you go.',
+      '⚖️ Adjust stock — Add or remove inventory directly (found stock, damaged items, count corrections).',
+      '📍 Manage locations — Create new bin locations and reassign which bin a product lives in.',
+      '🛒 Shopping list — Add supplies you need ordered. Admin places the order; you check items off once they arrive.',
+      '🔢 Cycle counts & returns — Count assigned bins and process customer returns as they come in.',
     ],
     numberColor: 'bg-green-600 text-white',
     buttonColor: 'bg-green-600 hover:bg-green-700',
@@ -96,8 +105,8 @@ export default function WorkerOnboarding({ workerId, role, focusTask, onDismiss 
   return (
     <div className="fixed inset-0 z-50 bg-gray-950/80 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-lg relative">
-        <span className={`absolute top-6 right-6 text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${config.badgeColor}`}>
-          {role === 'all' ? 'All roles' : role}
+        <span className={`absolute top-6 right-6 text-xs font-semibold px-2.5 py-1 rounded-full ${config.badgeColor}`}>
+          {ROLE_BADGE_LABELS[role]}
         </span>
 
         <h2 className="text-xl font-bold text-gray-900 pr-24 mb-6 leading-snug">

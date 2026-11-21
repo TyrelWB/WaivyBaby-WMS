@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Warehouse } from 'lucide-react'
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -27,19 +26,14 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950">
+    <div className="min-h-screen flex items-center justify-center bg-black">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
-            <Warehouse size={20} className="text-white" />
-          </div>
-          <div>
-            <p className="font-bold text-white text-lg leading-none">Waivy WMS</p>
-            <p className="text-xs text-gray-500 leading-none mt-0.5">Admin Portal</p>
-          </div>
+          <img src="/logo.png" alt="Waivy WMS" className="w-10 h-10 rounded-full" />
+          <p className="font-bold text-white text-lg leading-none">Waivy WMS</p>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8">
+        <div className="bg-black border border-gray-800 rounded-2xl p-8">
           <h1 className="text-xl font-bold text-white mb-1">Sign in</h1>
           <p className="text-sm text-gray-500 mb-6">Admin access only</p>
 
@@ -76,15 +70,9 @@ export default function AdminLoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-800 text-center space-y-3">
-            <div>
-              <p className="text-xs text-gray-500">Don't have an account?</p>
-              <a href="/signup" className="text-sm text-blue-400 hover:text-blue-300 font-medium mt-1 inline-block">Create account →</a>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Are you a warehouse worker?</p>
-              <a href="/worker" className="text-sm text-blue-400 hover:text-blue-300 font-medium mt-1 inline-block">Worker PIN Login →</a>
-            </div>
+          <div className="mt-6 pt-6 border-t border-gray-800 text-center">
+            <p className="text-xs text-gray-500">Are you a warehouse worker?</p>
+            <a href="/worker" className="text-sm text-blue-400 hover:text-blue-300 font-medium mt-1 inline-block">Worker PIN Login →</a>
           </div>
         </div>
       </div>

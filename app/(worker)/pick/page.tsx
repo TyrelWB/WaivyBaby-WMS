@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { parseBarcode } from '@/lib/barcode'
+import { parseBarcode, lookupProductIdByBarcode } from '@/lib/barcode'
 import { playSuccess, playError } from '@/lib/feedback'
 import { writeAudit } from '@/lib/audit'
 import { Scan, CheckCircle, XCircle, Package, ShoppingBasket, LogOut, Camera, AlertTriangle, MapPin, SkipForward, Layers, Loader2, LayoutGrid, Undo2 } from 'lucide-react'
@@ -478,16 +478,57 @@ export default function PickPage() {
     await logScan(raw, 'product', 'pick', 'success', null)
   }
 
+  // Scanning a bundle/collection's OWN barcode (not one of its parts) means a
+  // pre-assembled unit is being picked whole — only valid if there's actually
+  // assembled stock for that product. Otherwise the picker needs to build it
+  // by scanning each part instead.
+  async function handleAssembledScan(item: OrderItem, raw: string) {
+    if (!worker || !order) return
+    const { data: inv } = await supabase
+      .from('inventory')
+      .select('id, qty_available, qty_reserved, qty_picked')
+      .eq('product_id', item.product_id)
+      .eq('org_id', worker.orgId)
+      .single()
+
+    if (!inv || inv.qty_available <= 0) {
+      playError()
+      setLastScan({ result: 'warning', message: `No pre-assembled ${item.products.name} in stock — scan each part instead.` })
+      await logScan(raw, 'product', 'pick', 'error', 'No assembled stock for bundle/collection')
+      return
+    }
+
+    const preScanSnapshot = { ...item }
+    await supabase.from('order_items').update({ quantity_picked: item.quantity_ordered, status: 'picked' }).eq('id', item.id)
+    await supabase.from('inventory').update({
+      qty_reserved: Math.max(0, inv.qty_reserved - 1),
+      qty_available: inv.qty_available - 1,
+      qty_picked: inv.qty_picked + 1,
+    }).eq('id', inv.id)
+    await writeAudit(supabase, {
+      orgId: worker.orgId, workerId: worker.workerId,
+      action: 'item_picked', entityType: 'inventory', entityId: inv.id,
+      changes: { product: item.products.name, qty_picked: inv.qty_picked + 1 },
+      note: `Picked as pre-assembled unit for order #${order.order_number}`,
+    })
+
+    await logScan(raw, 'product', 'pick', 'success', null)
+    playSuccess()
+    setLastScan({ result: 'success', message: `✓ ${item.products.name} — picked as pre-assembled unit` })
+    setLastAction({ item: preScanSnapshot, invId: inv.id })
+
+    if (skippedItemIds.has(item.id)) setSkippedItemIds(prev => { const n = new Set(prev); n.delete(item.id); return n })
+    const remaining = items.filter(i => i.id !== item.id)
+    setItems(remaining)
+    if (remaining.length === 0) await completeOrder()
+  }
+
   async function handleItemScan(parsed: ReturnType<typeof parseBarcode>) {
     if (!order || !worker) return
 
-    const { data: productBarcode } = await supabase
-      .from('product_barcodes')
-      .select('product_id')
-      .eq('barcode', parsed.raw)
-      .single()
+    const productId = await lookupProductIdByBarcode(supabase, parsed.raw)
 
-    if (!productBarcode) {
+    if (!productId) {
       playError()
       setHardError({ message: `Barcode not recognized: ${parsed.raw}` })
       await supabase.from('exceptions').insert({
@@ -499,26 +540,31 @@ export default function PickPage() {
       return
     }
 
+    // Scanning the bundle/collection's own barcode directly — try to pick it
+    // as one pre-assembled unit instead of requiring every part.
+    const directItem = items.find(i => i.product_id === productId && componentMap[i.product_id] && i.quantity_picked < i.quantity_ordered)
+    if (directItem) { await handleAssembledScan(directItem, parsed.raw); return }
+
     // Collection: check if this sub-product belongs to any collection item
     const collectionItem = items.find(i => {
       const entry = componentMap[i.product_id]
-      return entry?.type === 'collection' && entry.products.some(p => p.sub_products.some(s => s.sub_product_id === productBarcode.product_id))
+      return entry?.type === 'collection' && entry.products.some(p => p.sub_products.some(s => s.sub_product_id === productId))
     })
-    if (collectionItem) { await handleCollectionSubProductScan(productBarcode.product_id, collectionItem, parsed.raw); return }
+    if (collectionItem) { await handleCollectionSubProductScan(productId, collectionItem, parsed.raw); return }
 
     // Bundle: check if this sub-product belongs to any bundle item
     const bundleItem = items.find(i => {
       const entry = componentMap[i.product_id]
-      return entry?.type === 'bundle' && entry.items.some(c => c.sub_product_id === productBarcode.product_id)
+      return entry?.type === 'bundle' && entry.items.some(c => c.sub_product_id === productId)
     })
     if (bundleItem) {
       const entry = componentMap[bundleItem.product_id] as BundleEntry
-      await handleSubProductScan(productBarcode.product_id, bundleItem, parsed.raw, entry.items)
+      await handleSubProductScan(productId, bundleItem, parsed.raw, entry.items)
       return
     }
 
-    const anyItemForProduct = items.find(i => i.product_id === productBarcode.product_id)
-    const item = items.find(i => i.product_id === productBarcode.product_id && i.quantity_picked < i.quantity_ordered)
+    const anyItemForProduct = items.find(i => i.product_id === productId)
+    const item = items.find(i => i.product_id === productId && i.quantity_picked < i.quantity_ordered)
 
     if (!item) {
       playError()
@@ -733,24 +779,17 @@ export default function PickPage() {
           )}
         </div>
         <div className="flex items-center gap-4">
-          {order && step === 'picking' && (
-            <div className="flex items-center gap-3">
-              <div className="w-40 h-2 bg-gray-800 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
-              </div>
-              <span className="text-sm text-blue-400 font-bold tabular-nums">{pickedItems}/{totalItems}</span>
-            </div>
-          )}
           {todayPickCount !== null && (
             <span className="hidden sm:inline text-sm text-gray-500">
               <span className="text-white font-bold">{todayPickCount}</span> picked today
             </span>
           )}
+          <span className="hidden sm:block w-px h-4 bg-gray-800" />
           <Link href="/hub" className="flex items-center gap-2 text-gray-500 hover:text-gray-300 text-sm transition-colors">
-            <LayoutGrid size={16} /> Switch task
+            <LayoutGrid size={16} /> <span className="hidden sm:inline">Switch task</span>
           </Link>
           <button onClick={handleLogout} className="flex items-center gap-2 text-gray-500 hover:text-gray-300 text-sm transition-colors">
-            <LogOut size={16} /> Log out
+            <LogOut size={16} /> <span className="hidden sm:inline">Log out</span>
           </button>
         </div>
       </div>
@@ -877,10 +916,14 @@ export default function PickPage() {
           <div className="md:w-72 xl:w-80 border-b md:border-b-0 md:border-r border-gray-800 flex flex-col bg-gray-900/20 md:shrink-0 max-h-48 md:max-h-none">
             <div className="px-4 py-4 border-b border-gray-800">
               {order.notes && (
-                <div className="flex items-start gap-1.5 mb-3 bg-yellow-950 rounded px-2.5 py-2">
-                  <AlertTriangle size={12} className="text-yellow-400 shrink-0 mt-0.5" />
-                  <p className="text-xs text-yellow-300">{order.notes}</p>
-                </div>
+                order.notes.startsWith('Wix #') ? (
+                  <p className="text-xs text-gray-600 mb-3">{order.notes}</p>
+                ) : (
+                  <div className="flex items-start gap-1.5 mb-3 bg-yellow-950 rounded px-2.5 py-2">
+                    <AlertTriangle size={12} className="text-yellow-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-yellow-300">{order.notes}</p>
+                  </div>
+                )
               )}
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs text-gray-500">{pickedItems}/{totalItems} items picked</span>
@@ -891,9 +934,10 @@ export default function PickPage() {
               </div>
             </div>
 
+            {upNextItems.length > 0 && (
             <div className="px-3 py-3 flex-1 overflow-y-auto">
               <p className="text-xs text-gray-600 uppercase tracking-widest font-semibold px-1 mb-2">
-                {upNextItems.length > 0 ? `Up Next (${upNextItems.length})` : 'Last Item'}
+                Up Next ({upNextItems.length})
               </p>
               <div className="space-y-1.5">
                 {upNextItems.map(item => {
@@ -920,6 +964,7 @@ export default function PickPage() {
                 })}
               </div>
             </div>
+            )}
           </div>
 
           {/* Right panel: scan + current item */}
@@ -1018,7 +1063,7 @@ export default function PickPage() {
                         </div>
 
                         {/* Sub-products for current collection product */}
-                        <div className="space-y-2 mb-5">
+                        <div className="space-y-2 mb-5 max-h-72 overflow-y-auto pr-1">
                           {currentColProduct.sub_products.map(c => {
                             const picked = progress[c.sub_product_id] || 0
                             const required = c.quantity * currentItem.quantity_ordered
@@ -1073,7 +1118,7 @@ export default function PickPage() {
 
                         {/* Bundle sub-products */}
                         {isBundle && (
-                          <div className="space-y-2 mb-5">
+                          <div className="space-y-2 mb-5 max-h-72 overflow-y-auto pr-1">
                             {(entry as BundleEntry).items.map(c => {
                               const picked = progress[c.sub_product_id] || 0
                               const required = c.quantity * currentItem.quantity_ordered

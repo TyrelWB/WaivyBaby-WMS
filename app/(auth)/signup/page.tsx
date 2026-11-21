@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Warehouse } from 'lucide-react'
 
 export default function SignupPage() {
   const router = useRouter()
@@ -55,13 +54,8 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-950">
       <div className="w-full max-w-sm">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
-            <Warehouse size={20} className="text-white" />
-          </div>
-          <div>
-            <p className="font-bold text-white text-lg leading-none">Waivy WMS</p>
-            <p className="text-xs text-gray-500 leading-none mt-0.5">Admin Portal</p>
-          </div>
+          <img src="/logo.png" alt="Waivy WMS" className="w-10 h-10 rounded-full" />
+          <p className="font-bold text-white text-lg leading-none">Waivy WMS</p>
         </div>
 
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8">

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   ShoppingCart, Package, AlertTriangle, CheckCircle, Clock,
-  Truck, RefreshCw, TrendingDown, Ship, ClipboardList, Warehouse, MoreHorizontal
+  Truck, RefreshCw, TrendingDown, Ship, Warehouse, DollarSign, Boxes
 } from 'lucide-react'
 import { useAdminContext } from '../admin-context'
 
@@ -17,6 +17,8 @@ type Stats = {
   lowStock: number
   inReceiving: number
   activePOs: number
+  inventoryValue: number
+  activeSkus: number
 }
 
 type RecentOrder = {
@@ -45,12 +47,29 @@ type LowStockItem = {
   products: { id: string; name: string; sku: string; reorder_point: number } | null
 }
 
+type DailyCount = { date: string; count: number }
+
 const statusConfig: Record<string, { label: string; className: string }> = {
   pending:   { label: 'Pending',   className: 'bg-gray-100 text-gray-600' },
   picking:   { label: 'Picking',   className: 'bg-amber-50 text-amber-600' },
   packing:   { label: 'Packing',   className: 'bg-violet-50 text-violet-600' },
   shipped:   { label: 'Shipped',   className: 'bg-emerald-50 text-emerald-600' },
   cancelled: { label: 'Cancelled', className: 'bg-gray-100 text-gray-400' },
+}
+
+const donutColors: Record<string, string> = {
+  pending: '#D1D5DB',
+  picking: '#FBBF24',
+  packing: '#A78BFA',
+  shipped: '#34D399',
+}
+
+function buildDaySeries(days: number): DailyCount[] {
+  return Array.from({ length: days }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() - (days - 1 - i))
+    return { date: d.toISOString().split('T')[0], count: 0 }
+  })
 }
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -73,10 +92,14 @@ function CardHeader({ title, action }: { title: string; action?: React.ReactNode
 export default function DashboardPage() {
   const supabase = createClient()
   const { orgId } = useAdminContext()
-  const [stats, setStats] = useState<Stats>({ pending: 0, picking: 0, packing: 0, shippedToday: 0, exceptions: 0, lowStock: 0, inReceiving: 0, activePOs: 0 })
+  const [stats, setStats] = useState<Stats>({
+    pending: 0, picking: 0, packing: 0, shippedToday: 0, exceptions: 0,
+    lowStock: 0, inReceiving: 0, activePOs: 0, inventoryValue: 0, activeSkus: 0,
+  })
   const [orders, setOrders] = useState<RecentOrder[]>([])
   const [exceptions, setExceptions] = useState<ExceptionItem[]>([])
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([])
+  const [orderTrend, setOrderTrend] = useState<DailyCount[]>([])
   const [loading, setLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState(new Date())
   const [showOnboardingBanner, setShowOnboardingBanner] = useState(false)
@@ -85,6 +108,9 @@ export default function DashboardPage() {
     if (!orgId) { setLoading(false); return }
 
     const today = new Date().toISOString().split('T')[0]
+    const trendDays = 14
+    const trendSince = new Date()
+    trendSince.setDate(trendSince.getDate() - trendDays)
 
     const [
       { data: orderData },
@@ -94,6 +120,7 @@ export default function DashboardPage() {
       { data: poData },
       { data: shippedTodayData },
       { count: workerCount },
+      { data: trendOrders },
     ] = await Promise.all([
       supabase.from('orders')
         .select('id, order_number, customer_name, status, is_rush, is_bulk, created_at, workers!assigned_picker_id(name)')
@@ -109,7 +136,7 @@ export default function DashboardPage() {
         .order('created_at', { ascending: false })
         .limit(10),
       supabase.from('inventory')
-        .select('id, qty_available, products(id, name, sku, reorder_point)')
+        .select('id, qty_available, qty_on_hand, products(id, name, sku, reorder_point, price)')
         .eq('org_id', orgId),
       supabase.from('receiving')
         .select('id', { count: 'exact', head: true })
@@ -128,6 +155,10 @@ export default function DashboardPage() {
       supabase.from('workers')
         .select('id', { count: 'exact', head: true })
         .eq('org_id', orgId),
+      supabase.from('orders')
+        .select('created_at')
+        .eq('org_id', orgId)
+        .gte('created_at', trendSince.toISOString()),
     ])
 
     const all = orderData || []
@@ -136,6 +167,15 @@ export default function DashboardPage() {
       const rp = i.products?.reorder_point ?? 0
       return rp > 0 && i.qty_available <= rp
     }) as unknown as LowStockItem[]
+
+    const inventoryValue = inv.reduce((sum: number, i: any) => sum + (i.qty_on_hand || 0) * (i.products?.price || 0), 0)
+
+    const trendSeries = buildDaySeries(trendDays)
+    for (const o of (trendOrders || [])) {
+      const day = o.created_at.split('T')[0]
+      const slot = trendSeries.find(s => s.date === day)
+      if (slot) slot.count++
+    }
 
     setStats({
       pending: all.filter(o => o.status === 'pending').length,
@@ -146,11 +186,14 @@ export default function DashboardPage() {
       lowStock: lowItems.length,
       inReceiving: (receivingData as any)?.length ?? 0,
       activePOs: (poData as any)?.length ?? 0,
+      inventoryValue,
+      activeSkus: inv.length,
     })
 
     setOrders(all as unknown as RecentOrder[])
     setExceptions(exceptionData as unknown as ExceptionItem[] || [])
     setLowStockItems(lowItems.sort((a, b) => (a.qty_available - (a.products?.reorder_point ?? 0)) - (b.qty_available - (b.products?.reorder_point ?? 0))))
+    setOrderTrend(trendSeries)
     setShowOnboardingBanner((workerCount ?? 0) === 0)
     setLastRefresh(new Date())
     setLoading(false)
@@ -162,17 +205,6 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [orgId])
 
-  const statCards = [
-    { label: 'Pending',      value: stats.pending,      icon: Clock,         accent: '#6B7280', bg: '#F3F4F6', href: '/orders' },
-    { label: 'Picking',      value: stats.picking,      icon: Package,       accent: '#D97706', bg: '#FFFBEB', href: '/orders?status=picking' },
-    { label: 'Packing',      value: stats.packing,      icon: ShoppingCart,  accent: '#7C3AED', bg: '#F5F3FF', href: '/orders?status=packing' },
-    { label: 'Shipped Today',value: stats.shippedToday, icon: Truck,         accent: '#059669', bg: '#ECFDF5', href: '/reports' },
-    { label: 'Exceptions',   value: stats.exceptions,   icon: AlertTriangle, accent: '#DC2626', bg: '#FEF2F2', href: '/exceptions' },
-    { label: 'Low Stock',    value: stats.lowStock,     icon: TrendingDown,  accent: '#EA580C', bg: '#FFF7ED', href: '/inventory' },
-    { label: 'In Receiving', value: stats.inReceiving,  icon: Truck,         accent: '#0284C7', bg: '#F0F9FF', href: '/receiving' },
-    { label: 'Active POs',   value: stats.activePOs,    icon: Ship,          accent: '#4F46E5', bg: '#EEF2FF', href: '/purchase-orders' },
-  ]
-
   const pipeline = [
     { key: 'pending',  label: 'Pending',       dot: '#9CA3AF' },
     { key: 'picking',  label: 'Picking',       dot: '#FBBF24' },
@@ -180,13 +212,43 @@ export default function DashboardPage() {
     { key: 'shipped',  label: 'Shipped Today', dot: '#34D399', today: true },
   ]
 
+  // Order status breakdown feeds the donut — same underlying counts as the pipeline
+  const statusBreakdown = [
+    { status: 'pending', count: stats.pending },
+    { status: 'picking', count: stats.picking },
+    { status: 'packing', count: stats.packing },
+    { status: 'shipped', count: stats.shippedToday },
+  ].filter(s => s.count > 0)
+  const statusTotal = statusBreakdown.reduce((s, x) => s + x.count, 0)
+
+  // Build a conic-gradient donut from the status breakdown
+  let acc = 0
+  const donutStops = statusBreakdown.map(s => {
+    const start = (acc / (statusTotal || 1)) * 360
+    acc += s.count
+    const end = (acc / (statusTotal || 1)) * 360
+    return `${donutColors[s.status]} ${start}deg ${end}deg`
+  })
+  const donutBackground = statusTotal > 0 ? `conic-gradient(${donutStops.join(', ')})` : '#F3F4F6'
+
+  const trendMax = Math.max(...orderTrend.map(d => d.count), 1)
+  const secondaryStats = [
+    { label: 'Pending',      value: stats.pending,      icon: Clock,         accent: '#6B7280', bg: '#F3F4F6', href: '/orders' },
+    { label: 'Picking',      value: stats.picking,      icon: Package,       accent: '#D97706', bg: '#FFFBEB', href: '/orders?status=picking' },
+    { label: 'Packing',      value: stats.packing,      icon: ShoppingCart,  accent: '#7C3AED', bg: '#F5F3FF', href: '/orders?status=packing' },
+    { label: 'Shipped Today',value: stats.shippedToday, icon: Truck,         accent: '#059669', bg: '#ECFDF5', href: '/reports' },
+    { label: 'Low Stock',    value: stats.lowStock,     icon: TrendingDown,  accent: '#EA580C', bg: '#FFF7ED', href: '/inventory' },
+    { label: 'In Receiving', value: stats.inReceiving,  icon: Truck,         accent: '#0284C7', bg: '#F0F9FF', href: '/receiving' },
+    { label: 'Active POs',   value: stats.activePOs,    icon: Ship,          accent: '#4F46E5', bg: '#EEF2FF', href: '/purchase-orders' },
+  ]
+
   return (
     <div className="p-5 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Command Center</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Live warehouse overview · refreshes every 30s</p>
+          <h1 className="text-lg font-bold text-gray-900">Dashboard</h1>
+          <p className="text-xs text-gray-400 mt-0.5">Realtime warehouse overview · refreshes every 30s</p>
         </div>
         <button
           onClick={fetchAll}
@@ -215,9 +277,112 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-4 gap-3 xl:grid-cols-8">
-        {statCards.map(s => {
+      {/* Hero KPI row — 3 plain cards + 1 highlighted "needs attention" card */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-gray-500">Total Inventory Value</span>
+            <DollarSign size={14} className="text-gray-300" />
+          </div>
+          <p className="text-2xl font-bold text-gray-900 tabular-nums">
+            {loading ? '—' : `$${stats.inventoryValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+          </p>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-gray-500">Active SKUs</span>
+            <Boxes size={14} className="text-gray-300" />
+          </div>
+          <p className="text-2xl font-bold text-gray-900 tabular-nums">{loading ? '—' : stats.activeSkus.toLocaleString()}</p>
+        </div>
+        <a href="/receiving" className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-gray-500">In Receiving</span>
+            <Truck size={14} className="text-gray-300" />
+          </div>
+          <p className="text-2xl font-bold text-gray-900 tabular-nums">{loading ? '—' : stats.inReceiving}</p>
+        </a>
+        <a
+          href="/exceptions"
+          className={`rounded-2xl shadow-sm p-5 transition-shadow hover:shadow-md ${stats.exceptions > 0 ? 'bg-gray-900' : 'bg-emerald-600'}`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-white/70">{stats.exceptions > 0 ? 'Needs Attention' : 'All Clear'}</span>
+            <AlertTriangle size={14} className="text-white/40" />
+          </div>
+          <p className="text-2xl font-bold text-white tabular-nums">
+            {loading ? '—' : stats.exceptions > 0 ? `${stats.exceptions} exception${stats.exceptions === 1 ? '' : 's'}` : 'No exceptions'}
+          </p>
+        </a>
+      </div>
+
+      {/* Trend chart + status donut */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card className="col-span-2 p-6">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="font-semibold text-gray-900 text-sm">Order Volume Trend</h2>
+            <span className="text-lg font-bold text-gray-900 tabular-nums">{loading ? '—' : orderTrend.reduce((s, d) => s + d.count, 0)}</span>
+          </div>
+          <p className="text-xs text-gray-400 mb-5">Orders created — last 14 days</p>
+          {loading ? (
+            <div className="h-28 bg-gray-50 rounded-lg animate-pulse" />
+          ) : (
+            <div className="flex items-end gap-1 h-28">
+              {orderTrend.map(d => {
+                const heightPct = trendMax > 0 ? (d.count / trendMax) * 100 : 0
+                const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                return (
+                  <div key={d.date} className="flex-1 flex flex-col items-center justify-end gap-1 group relative">
+                    <div
+                      className="w-full rounded-sm bg-cyan-500 opacity-80 group-hover:opacity-100 transition-opacity min-h-[2px]"
+                      style={{ height: `${Math.max(heightPct, d.count > 0 ? 4 : 0)}%` }}
+                    />
+                    <span className="text-[9px] text-gray-400 whitespace-nowrap">{label.split(' ')[1]}</span>
+                    <div className="absolute bottom-full mb-1 bg-gray-900 text-white text-xs rounded px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                      {label}: {d.count}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="font-semibold text-gray-900 text-sm mb-1">Order Status Overview</h2>
+          <p className="text-xs text-gray-400 mb-5">Active orders right now</p>
+          {loading ? (
+            <div className="h-32 bg-gray-50 rounded-full animate-pulse mx-auto w-32" />
+          ) : statusTotal === 0 ? (
+            <div className="flex flex-col items-center justify-center py-4">
+              <CheckCircle size={28} className="text-emerald-400 mb-2" />
+              <p className="text-xs text-gray-400">No active orders</p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-5">
+              <div className="relative w-28 h-28 shrink-0 rounded-full" style={{ background: donutBackground }}>
+                <div className="absolute inset-3 bg-white rounded-full flex flex-col items-center justify-center">
+                  <span className="text-lg font-bold text-gray-900 tabular-nums">{statusTotal}</span>
+                  <span className="text-[9px] text-gray-400">orders</span>
+                </div>
+              </div>
+              <div className="space-y-1.5 flex-1 min-w-0">
+                {statusBreakdown.map(s => (
+                  <div key={s.status} className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: donutColors[s.status] }} />
+                    <span className="text-xs text-gray-600 flex-1 capitalize truncate">{statusConfig[s.status]?.label || s.status}</span>
+                    <span className="text-xs font-semibold text-gray-900 tabular-nums">{s.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Secondary KPI strip */}
+      <div className="grid grid-cols-7 gap-3">
+        {secondaryStats.map(s => {
           const Icon = s.icon
           return (
             <a

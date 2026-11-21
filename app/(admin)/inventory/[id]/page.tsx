@@ -77,6 +77,8 @@ export default function InventoryDetailPage() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [newBarcode, setNewBarcode] = useState('')
   const [addingBarcode, setAddingBarcode] = useState(false)
+  const [editingBarcodeId, setEditingBarcodeId] = useState<string | null>(null)
+  const [editBarcodeValue, setEditBarcodeValue] = useState('')
   const [components, setComponents] = useState<Component[]>([])
   const [subProducts, setSubProducts] = useState<SubProduct[]>([])
   const [addingComponent, setAddingComponent] = useState(false)
@@ -300,6 +302,16 @@ export default function InventoryDetailPage() {
     toast.success('Barcode added')
     setNewBarcode('')
     setAddingBarcode(false)
+    fetchProduct()
+  }
+
+  async function updateBarcode(id: string) {
+    if (!editBarcodeValue.trim()) return
+    const { error } = await supabase.from('product_barcodes').update({ barcode: editBarcodeValue.trim() }).eq('id', id)
+    if (error) { toast.error(error.message); return }
+    toast.success('Barcode updated')
+    setEditingBarcodeId(null)
+    setEditBarcodeValue('')
     fetchProduct()
   }
 
@@ -531,14 +543,35 @@ export default function InventoryDetailPage() {
           <div className="space-y-2">
             {barcodes.map(bc => (
               <div key={bc.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
-                <span className="font-mono text-sm text-gray-800 flex-1">{bc.barcode}</span>
-                {bc.is_primary && <span className="text-xs bg-blue-100 text-blue-600 font-medium px-2 py-0.5 rounded-full">Primary</span>}
-                {!bc.is_primary && (
-                  <button onClick={() => setPrimaryBarcode(bc.id)} className="text-xs text-gray-400 hover:text-blue-600 transition-colors">Set Primary</button>
+                {editingBarcodeId === bc.id ? (
+                  <>
+                    <input
+                      value={editBarcodeValue}
+                      onChange={e => setEditBarcodeValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') updateBarcode(bc.id) }}
+                      className="flex-1 border border-gray-200 rounded-lg px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                    />
+                    <button onClick={() => updateBarcode(bc.id)} className="text-xs text-blue-600 hover:text-blue-700 font-medium">Save</button>
+                    <button onClick={() => { setEditingBarcodeId(null); setEditBarcodeValue('') }} className="text-gray-400 hover:text-gray-600">
+                      <X size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-mono text-sm text-gray-800 flex-1">{bc.barcode}</span>
+                    {bc.is_primary && <span className="text-xs bg-blue-100 text-blue-600 font-medium px-2 py-0.5 rounded-full">Primary</span>}
+                    {!bc.is_primary && (
+                      <button onClick={() => setPrimaryBarcode(bc.id)} className="text-xs text-gray-400 hover:text-blue-600 transition-colors">Set Primary</button>
+                    )}
+                    <button onClick={() => { setEditingBarcodeId(bc.id); setEditBarcodeValue(bc.barcode) }} className="text-gray-300 hover:text-blue-500 transition-colors">
+                      <Edit2 size={14} />
+                    </button>
+                    <button onClick={() => removeBarcode(bc.id)} className="text-gray-300 hover:text-red-500 transition-colors">
+                      <X size={14} />
+                    </button>
+                  </>
                 )}
-                <button onClick={() => removeBarcode(bc.id)} className="text-gray-300 hover:text-red-500 transition-colors">
-                  <X size={14} />
-                </button>
               </div>
             ))}
           </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { parseBarcode } from '@/lib/barcode'
+import { parseBarcode, lookupProductIdByBarcode } from '@/lib/barcode'
 import { playSuccess, playError } from '@/lib/feedback'
 import { writeAudit } from '@/lib/audit'
 import { Scan, CheckCircle, XCircle, Package, LogOut, Box, ChevronRight, Camera, AlertTriangle, MapPin, LayoutGrid, Loader2 } from 'lucide-react'
@@ -13,7 +13,7 @@ import { toast } from 'sonner'
 import Link from 'next/link'
 
 type WorkerSession = { workerId: string; name: string; role: string; orgId: string; warehouseId: string }
-type Order = { id: string; order_number: string; customer_name: string | null; is_rush: boolean; is_bulk: boolean; notes: string | null; total_boxes: number | null; basket_id: string | null; current_location: string | null }
+type Order = { id: string; order_number: string; customer_name: string | null; is_rush: boolean; is_bulk: boolean; notes: string | null; total_boxes: number | null; current_location: string | null }
 type OrderItem = { id: string; product_id: string; quantity_ordered: number; quantity_picked: number; status: string; products: { name: string; sku: string; image_url: string | null } }
 type AvailableOrder = { id: string; order_number: string; customer_name: string | null; is_rush: boolean; is_bulk: boolean; notes: string | null; created_at: string; item_count: number }
 
@@ -144,7 +144,7 @@ export default function PackPage() {
         .update({ assigned_packer_id: worker.workerId })
         .eq('id', target.id)
         .is('assigned_packer_id', null)
-        .select('id, order_number, customer_name, is_rush, is_bulk, notes, total_boxes, basket_id, current_location')
+        .select('id, order_number, customer_name, is_rush, is_bulk, notes, total_boxes, current_location')
         .single()
 
       if (error || !claimed) {
@@ -183,7 +183,7 @@ export default function PackPage() {
   async function fetchAssignedOrder(session: WorkerSession) {
     const { data } = await supabase
       .from('orders')
-      .select('id, order_number, customer_name, is_rush, is_bulk, notes, total_boxes, basket_id, current_location, status')
+      .select('id, order_number, customer_name, is_rush, is_bulk, notes, total_boxes, current_location, status')
       .eq('assigned_packer_id', session.workerId)
       .in('status', ['picked', 'packing'])
       .order('is_rush', { ascending: false })
@@ -242,13 +242,9 @@ export default function PackPage() {
   async function handleItemScan(parsed: ReturnType<typeof parseBarcode>) {
     if (!order || !worker) return
 
-    const { data: productBarcode } = await supabase
-      .from('product_barcodes')
-      .select('product_id')
-      .eq('barcode', parsed.raw)
-      .single()
+    const productId = await lookupProductIdByBarcode(supabase, parsed.raw)
 
-    if (!productBarcode) {
+    if (!productId) {
       playError()
       setHardError({ message: `Barcode not recognized: ${parsed.raw}` })
       await supabase.from('exceptions').insert({
@@ -260,10 +256,10 @@ export default function PackPage() {
       return
     }
 
-    const item = items.find(i => i.product_id === productBarcode.product_id && (packProgress[i.id] || 0) < i.quantity_ordered)
+    const item = items.find(i => i.product_id === productId && (packProgress[i.id] || 0) < i.quantity_ordered)
     if (!item) {
       playError()
-      const anyItem = items.find(i => i.product_id === productBarcode.product_id)
+      const anyItem = items.find(i => i.product_id === productId)
       if (anyItem) {
         setLastScan({ result: 'warning', message: `${anyItem.products.name} is already fully packed.` })
       } else {
@@ -321,12 +317,6 @@ export default function PackPage() {
 
     const activeBoxId = boxIds[currentBox - 1]
     if (activeBoxId) await supabase.from('boxes').update({ status: 'closed' }).eq('id', activeBoxId)
-
-    if (order.basket_id) {
-      await supabase.from('baskets').update({
-        status: 'available', current_order_id: null, current_worker_id: null, claimed_at: null,
-      }).eq('id', order.basket_id)
-    }
 
     await supabase.from('orders').update({ status: 'packed', packed_at: new Date().toISOString() } as any).eq('id', order.id)
     await writeAudit(supabase, {

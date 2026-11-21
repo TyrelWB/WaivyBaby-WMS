@@ -28,7 +28,6 @@ type Order = {
   shipping_state: string | null
   shipping_zip: string | null
   shipping_country: string | null
-  basket_id: string | null
   current_location: string | null
 }
 type AvailableOrder = { id: string; order_number: string; customer_name: string | null; is_rush: boolean; notes: string | null; created_at: string; item_count: number }
@@ -97,7 +96,7 @@ export default function ShipPage() {
   }, [worker])
 
   async function fetchAssignedOrder(session: WorkerSession) {
-    const fields = 'id, order_number, customer_name, is_rush, notes, total_boxes, carrier, tracking_number, shipping_name, shipping_address_1, shipping_address_2, shipping_city, shipping_state, shipping_zip, shipping_country, basket_id, current_location'
+    const fields = 'id, order_number, customer_name, is_rush, notes, total_boxes, carrier, tracking_number, shipping_name, shipping_address_1, shipping_address_2, shipping_city, shipping_state, shipping_zip, shipping_country, current_location'
 
     const { data } = await supabase
       .from('orders').select(fields)
@@ -168,7 +167,7 @@ export default function ShipPage() {
       if (res.ok && data.labelUrl) {
         setLabelUrl(data.labelUrl)
         // Refresh order to pick up tracking number now set on the order
-        const fields = 'id, order_number, customer_name, is_rush, notes, total_boxes, carrier, tracking_number, shipping_name, shipping_address_1, shipping_address_2, shipping_city, shipping_state, shipping_zip, shipping_country, basket_id, current_location'
+        const fields = 'id, order_number, customer_name, is_rush, notes, total_boxes, carrier, tracking_number, shipping_name, shipping_address_1, shipping_address_2, shipping_city, shipping_state, shipping_zip, shipping_country, current_location'
         const { data: refreshed } = await supabase.from('orders').select(fields).eq('id', order.id).single()
         if (refreshed) setOrder(refreshed as Order)
         playSuccess()
@@ -225,7 +224,7 @@ export default function ShipPage() {
     if (!worker || claimingId) return
     setClaimingId(target.id)
     try {
-      const fields = 'id, order_number, customer_name, is_rush, notes, total_boxes, carrier, tracking_number, shipping_name, shipping_address_1, shipping_address_2, shipping_city, shipping_state, shipping_zip, shipping_country, basket_id, current_location'
+      const fields = 'id, order_number, customer_name, is_rush, notes, total_boxes, carrier, tracking_number, shipping_name, shipping_address_1, shipping_address_2, shipping_city, shipping_state, shipping_zip, shipping_country, current_location'
       const { data: claimed, error } = await supabase
         .from('orders')
         .update({ assigned_shipper_id: worker.workerId, status: 'shipping' })
@@ -255,12 +254,6 @@ export default function ShipPage() {
   async function confirmShipped() {
     if (!order || !worker) return
     setConfirming(true)
-
-    if (order.basket_id) {
-      await supabase.from('baskets').update({
-        status: 'available', current_order_id: null, current_worker_id: null, claimed_at: null,
-      }).eq('id', order.basket_id)
-    }
 
     await supabase.from('orders').update({ status: 'shipped', shipped_at: new Date().toISOString() } as any).eq('id', order.id)
 

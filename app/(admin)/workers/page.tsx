@@ -30,20 +30,20 @@ type Period = 'today' | 'week' | 'month'
 const emptyForm = { name: '', pin: '', role: 'all' }
 
 const roleColors: Record<string, string> = {
-  all:      'bg-cyan-50 text-cyan-700',
-  picker:   'bg-amber-50 text-amber-700',
-  packer:   'bg-violet-50 text-violet-700',
-  shipper:  'bg-orange-50 text-orange-700',
-  receiver: 'bg-cyan-50 text-cyan-700',
+  all:       'bg-gray-100 text-gray-700',
+  picker:    'bg-amber-50 text-amber-700',
+  packer:    'bg-violet-50 text-violet-700',
+  shipper:   'bg-orange-50 text-orange-700',
+  inventory: 'bg-cyan-50 text-cyan-700',
 }
 
 function roleLabel(role: string) {
   const labels: Record<string, string> = {
-    all:      'Inventory Specialist',
-    picker:   'Picker',
-    packer:   'Packer',
-    shipper:  'Shipper',
-    receiver: 'Inventory Specialist',
+    all:       'All Roles',
+    picker:    'Picker',
+    packer:    'Packer',
+    shipper:   'Shipper',
+    inventory: 'Inventory Control',
   }
   return labels[role] ?? role
 }
@@ -263,10 +263,11 @@ export default function WorkersPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1.5">Role</label>
                   <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-400">
-                    <option value="all">Inventory Specialist</option>
+                    <option value="all">All Roles</option>
                     <option value="picker">Picker</option>
                     <option value="packer">Packer</option>
                     <option value="shipper">Shipper</option>
+                    <option value="inventory">Inventory Control</option>
                   </select>
                 </div>
                 <div className="col-span-3 flex gap-3 justify-end pt-2">

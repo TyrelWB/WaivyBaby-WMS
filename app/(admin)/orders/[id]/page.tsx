@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, Zap, Package, User, ShoppingBasket, Plus, Trash2, AlertTriangle, Split, ExternalLink, RefreshCw, Printer, MapPin } from 'lucide-react'
+import { ArrowLeft, Zap, Package, User, Plus, Trash2, AlertTriangle, Split, ExternalLink, RefreshCw, Printer, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAdminContext } from '../../admin-context'
 
@@ -20,7 +20,6 @@ type Order = {
   assigned_picker_id: string | null
   assigned_packer_id: string | null
   assigned_shipper_id: string | null
-  basket_id: string | null
   pick_started_at: string | null
   pick_completed_at: string | null
   carrier: string | null
@@ -38,7 +37,6 @@ type Order = {
   created_at: string
   picker: { id: string; name: string } | null
   packer: { id: string; name: string } | null
-  basket: { barcode: string; name: string | null } | null
 }
 
 type OrderItem = {
@@ -97,7 +95,7 @@ export default function OrderDetailPage() {
     if (!orgId) { setLoading(false); return }
 
     const [{ data: orderData }, { data: itemData }, { data: workerData }, { data: productData }, { data: ssIntData }, { data: ssOrderIntData }] = await Promise.all([
-      supabase.from('orders').select('*, picker:workers!assigned_picker_id(id, name), packer:workers!assigned_packer_id(id, name), basket:baskets(barcode, name)').eq('id', id).single(),
+      supabase.from('orders').select('*, picker:workers!assigned_picker_id(id, name), packer:workers!assigned_packer_id(id, name)').eq('id', id).single(),
       supabase.from('order_items').select('*, products(name, sku, image_url, inventory(bin:bins(location_code)))').eq('order_id', id).order('created_at'),
       supabase.from('workers').select('id, name, role').eq('org_id', orgId).eq('is_active', true).order('name'),
       supabase.from('products').select('id, name, sku').eq('org_id', orgId).order('name'),
@@ -107,7 +105,9 @@ export default function OrderDetailPage() {
 
     const o = orderData as unknown as Order
     setOrder(o)
-    setItems(itemData as unknown as OrderItem[] || [])
+    const baseItems = (itemData as unknown as OrderItem[]) || []
+    // products can come back null if an item's product_id is orphaned (deleted product, bad data, etc.)
+    setItems(baseItems.map(i => ({ ...i, products: i.products || { name: 'Unknown product', sku: '—', image_url: null } })))
     setWorkers(workerData || [])
     setProducts(productData || [])
     if (o) setAddressForm({
@@ -543,27 +543,12 @@ export default function OrderDetailPage() {
             </div>
           )}
 
-          {/* Basket + Boxes */}
+          {/* Boxes */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-1.5 text-sm"><ShoppingBasket size={14} className="text-gray-400" /> Basket</h3>
-                {order.basket ? (
-                  <div className="bg-blue-50 rounded-lg p-2.5">
-                    <p className="text-xs font-medium text-blue-900">{order.basket.name || 'Basket'}</p>
-                    <p className="text-xs text-blue-600 font-mono mt-0.5">{order.basket.barcode}</p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400">None assigned</p>
-                )}
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-1.5 text-sm"><Package size={14} className="text-gray-400" /> Boxes</h3>
-                <div className="flex items-center gap-2">
-                  <input type="number" min={1} value={order.total_boxes} onChange={e => updateOrder({ total_boxes: parseInt(e.target.value) || 1 })} className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <span className="text-xs text-gray-500">{order.total_boxes === 1 ? 'box' : 'boxes'}</span>
-                </div>
-              </div>
+            <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-1.5 text-sm"><Package size={14} className="text-gray-400" /> Boxes</h3>
+            <div className="flex items-center gap-2">
+              <input type="number" min={1} value={order.total_boxes} onChange={e => updateOrder({ total_boxes: parseInt(e.target.value) || 1 })} className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <span className="text-xs text-gray-500">{order.total_boxes === 1 ? 'box' : 'boxes'}</span>
             </div>
           </div>
 

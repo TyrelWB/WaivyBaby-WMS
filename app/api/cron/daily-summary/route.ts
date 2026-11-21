@@ -74,7 +74,7 @@ export async function GET(req: Request) {
       .sort((a, b) => b.total - a.total)
 
     const roleColor: Record<string, string> = {
-      picker: '#2563eb', packer: '#7c3aed', shipper: '#ea580c', receiver: '#16a34a', all: '#374151',
+      picker: '#2563eb', packer: '#7c3aed', shipper: '#ea580c', inventory: '#16a34a', all: '#374151',
     }
 
     const shippedRows = shipped.slice(0, 20).map((o: any) => `
